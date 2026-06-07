@@ -339,12 +339,12 @@ for i in range(1, 11):
             st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคแล้ว</small>", unsafe_allow_html=True)
             
         # 3. ปุ่มกดรีเจน
-       if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"btn_{i}"):
-           if not p_name:
+        if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"btn_{i}"):
+            if not p_name:
                 st.error("กรุณาระบุชื่อโครงการก่อน")
-           else:
-        # เรียกฟังก์ชันด้วยค่าใหม่
-               generate_typhoon_stream(spec_prompt, i)
+            else:
+                spec_prompt = f"จงเขียนร่างข้อกำหนดขอบเขตงาน TOR โครงการ '{p_name}' ข้อ {i} หัวข้อ: {TOR_TITLES[i]} ภาษาราชการ งบประมาณ {p_budget} บาท"
+                generate_typhoon_stream(spec_prompt, i)
 
 st.write("")
 if st.button("✨ ให้ Typhoon เริ่มร่างข้อกำหนดส่วนที่เหลือพร้อมกันทั้งหมด", type="primary", use_container_width=True):
