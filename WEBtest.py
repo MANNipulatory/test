@@ -107,31 +107,59 @@ def extract_text_from_pdf(uploaded_file):
         return ""
 
 def clean_redundant_info(text):
-    """ใช้ Regex กรองข้อมูลติดต่อ และเซนเซอร์ชื่อบริษัท/ห้างหุ้นส่วน/แบรนด์สินค้าอัตโนมัติ"""
+    """ใช้ Regex เวอร์ชันอัปเกรด ดักจับและเซนเซอร์ชื่อบริษัท/ห้างหุ้นส่วน/แบรนด์สินค้า"""
     if not text:
         return ""
     
-    # 1. กรองเบอร์โทรศัพท์รูปแบบต่างๆ ออก
+    # 1. กรองเบอร์โทรศัพท์รูปแบบต่างๆ
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
     
-    # 2. กรองอีเมลออก
+    # 2. กรองอีเมล
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
     
-    # 3. กรองลิงก์/URL ออก
+    # 3. กรองลิงก์/URL
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
     
-    # 4. 🔥 เพิ่มการเซนเซอร์ชื่อบริษัท/นิติบุคคล (ภาษาไทย)
-    # จับกลุ่ม: บริษัท...จำกัด (มหาชน), บริษัท...จำกัด, ห้างหุ้นส่วนจำกัด..., หจก...., บมจ....
-    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(หจก\s*\.\s*[^\s\n]+)|(บมจ\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    # 4. เซนเซอร์ชื่อนิติบุคคลไทยแบบครอบคลุม
+    text = re.sub(r'(บริษัท\s+[^\s\n]+ coars\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    text = re.sub(r'บริษัท\s+([A-Za-z0-9เ-แ🏡ก-ฮ\s\.\-\(\)]+?)(?=\s*(?:เสนอ|ราคา|จำกัด|ติดต่อ|\n|$))', "[COMPANY_HIDDEN]", text)
+
+    # 5. เซนเซอร์ชื่อบริษัทภาษาอังกฤษ
+    en_company_pattern = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|Corporation|LLC|Pty\s+Ltd|Group)\b'
+    text = re.sub(en_company_pattern, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
     
-    # 5. 🔥 เพิ่มการเซนเซอร์ชื่อบริษัท (ภาษาอังกฤษ)
-    # จับกลุ่ม: ตัวอักษรตามด้วย Co., Ltd. / Company Limited / Inc. / Corp.
-    text = re.sub(r'\b[A-Za-z0-9\s\.,&-]+(?:Co\s*\.\s*,\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.|Corp\s*\.)', "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
-    
-    # 6. เซนเซอร์แบรนด์ไอทีหลักๆ ที่ชอบติดมาในสเปค (เพื่อป้องกันการล็อกสเปคเบื้องต้น)
+    # 6. เซนเซอร์แบรนด์ไอทีหลักๆ
     text = re.sub(r'\b(Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei)\b', "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
     
+    # 7. คลีนซ้ำซ้อน กรณีมีคำขยายหลงเหลืออยู่หน้าแท็กที่เซนเซอร์ไปแล้ว
+    text = re.sub(r'(ผู้ยื่นข้อเสนอ:|เสนอโดย:|โดยบริษัท)\s*\[COMPANY_HIDDEN\]', "[COMPANY_HIDDEN]", text)
+    
     return text
+
+def summarize_single_pdf_spec(raw_text):
+    """ส่งข้อความดิบไปให้ AI ช่วยคัดเลือกเอามาเฉพาะรายละเอียดสเปคเพียวๆ ตัดคำเกริ่นนำอื่นออกเพื่อลด Token"""
+    if not client or not raw_text:
+        return raw_text
+    
+    prompt = f"""
+    คุณคือผู้ช่วยสกัดข้อมูลทางเทคนิค หน้าที่ของคุณคืออ่านข้อความจากเอกสารด้านล่างนี้ 
+    แล้วดึงสรุปเฉพาะ 'รายละเอียดคุณลักษณะเฉพาะทางเทคนิค (Technical Specifications)' 
+    และ 'เงื่อนไขการรับประกัน/ส่งมอบงาน' ออกมาเป็นข้อๆ โดยตัดเนื้อหาส่วนอื่นที่ไม่จำเป็นทิ้งทั้งหมด (เช่น คำนำ, รายชื่อกรรมการ, เงื่อนไขสัญญาทั่วไป) เพื่อลดจำนวนคำให้สั้นที่สุด
+
+    [ข้อมูลเอกสาร]:
+    {raw_text[:6000]}
+    
+    จงสรุปผลเป็นข้อๆ ภาษาไทยอย่างสั้นและกระชับที่สุด:
+    """
+    try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.2)
+        )
+        return response.text
+    except Exception as e:
+        return f"[เกิดข้อผิดพลาดในการสรุปย่อย: {e}] \n" + raw_text[:2000]
 
 def create_docx(title, agency, project_type, budget, criteria, sections):
     try:
@@ -310,7 +338,7 @@ with tab_gen:
                     st.rerun()
 
 
-# ── แท็บที่ 2: PDF ANALYZER ───────────────────────────────────────
+# ── แท็บที่ 2: PDF ANALYZER (โหมดประหยัด Token: MapReduce ย่อยไฟล์ก่อน) ──
 with tab_pdf_analyze:
     st.write("")
     
@@ -333,26 +361,32 @@ with tab_pdf_analyze:
 
     if uploaded_files:
         st.write("")
-        if st.button("🔓 ดึงข้อมูลและคลีนสิ่งซ้ำซ้อนอัตโนมัติ", type="secondary", use_container_width=True):
-            with st.spinner("ระบบกำลังอ่านข้อความและใช้ Regex เคลียร์ข้อมูลติดต่อและชื่อบริษัทออกเบื้องต้น..."):
+        # ปรับปรุงชื่อปุ่มให้สื่อสารถึงการคัดกรองเนื้อหา
+        if st.button("🔓 ดึงข้อมูลและสรุปสเปคย่อยรายบริษัท (ประหยัด Token)", type="secondary", use_container_width=True):
+            with st.spinner("กำลังอ่านข้อความ ดัน Regex คลีนชื่อบริษัท และให้ AI สกัดเฉพาะสเปคเนื้อๆ..."):
                 st.session_state.pdf_extracted_texts = {}
                 for file in uploaded_files:
+                    # 1. ดึงข้อความดิบ
                     raw_text = extract_text_from_pdf(file)
+                    # 2. คลีนนิ่งผ่าน Regex ขั้นแรก (เซนเซอร์ชื่อบริษัท แบรนด์ เบอร์โทร)
                     cleaned_text = clean_redundant_info(raw_text)
-                    st.session_state.pdf_extracted_texts[file.name] = cleaned_text
-            st.success("ดึงและจัดระเบียบข้อมูลสำเร็จ! ตรวจสอบความถูกต้องขั้นสุดท้ายที่กล่องข้อความด้านล่าง")
+                    # 3. ส่งไปย่อยข้อมูล (วิธีที่ 3) ดึงมาเฉพาะสเปคเพียวๆ ไม่กินโควต้าใหญ่
+                    summarized_spec = summarize_single_pdf_spec(cleaned_text)
+                    
+                    st.session_state.pdf_extracted_texts[file.name] = summarized_spec
+            st.success("สกัดสเปคย่อยและซ่อนความลับสำเร็จ! ตรวจทานข้อมูลสั้นที่กล่องด้านล่างได้เลยครับ")
 
     if st.session_state.pdf_extracted_texts:
         st.write("")
-        st.markdown("### 📝 ตรวจทานและแก้ไขเนื้อหาเอกสารด้วยตัวเอง")
-        st.info("💡 ข้อความด้านล่างผ่านการใช้ Regex ซ่อนชื่อบริษัท/เบอร์โทร/อีเมลแล้ว ท่านสามารถพิมพ์แก้ไขสเปคส่วนเกินออกเพิ่มได้ด้วยตัวเองทันทีก่อนส่งให้ AI ประมวลผล")
+        st.markdown("### 📝 ตรวจทานสเปคสรุปของแต่ละบริษัท (กระชับและคลีนแล้ว)")
+        st.info("💡 ข้อความด้านล่างนี้ถูกสกัดมาเฉพาะเนื้อหาเน้นๆ และเซนเซอร์ข้อมูลบริษัทแล้ว พี่สามารถพิมพ์ปรับแก้ ปาดเอาคำหลุดออกได้ง่ายๆ ก่อนส่งมัดรวมทำสเปคกลาง")
         
         for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
-            with st.expander(f"📄 ตรวจสอบเนื้อหา: {file_name}", expanded=True):
+            with st.expander(f"📋 สเปคสรุป: {file_name}", expanded=True):
                 user_updated_text = st.text_area(
-                    "แก้ไขเนื้อหาข้อความเพื่อเตรียมส่งให้ AI",
+                    "แก้ไขสเปคย่อยท่อนนี้",
                     value=text_content,
-                    height=200,
+                    height=180,
                     key=f"user_edit_{file_name}",
                     label_visibility="collapsed"
                 )
@@ -366,20 +400,21 @@ with tab_pdf_analyze:
             elif not job_description_pdf:
                 st.warning("⚠️ โปรดใส่ลักษณะงานหรือวัตถุประสงค์ก่อน")
             else:
-                with st.spinner("Gemini กำลังวิเคราะห์จุดร่วมทางเทคนิคเพื่อสร้างสเปคกลางที่โปร่งใส..."):
+                with st.spinner("Gemini กำลังวิเคราะห์ข้อมูลสเปคสรุปเพื่อทำร่างสเปคกลางที่ปลอดภัยจากการล็อกสเปค..."):
                     try:
+                        # มัดรวมเฉพาะข้อมูลที่สกัดสั้นแล้ว (Input สั้นลง 70% ประหยัด Token มากๆ)
                         all_companies_data_prompt = ""
                         for idx, (f_name, final_text) in enumerate(st.session_state.pdf_extracted_texts.items()):
-                            all_companies_data_prompt += f"\n--- Spec Document {idx+1} ---\n{final_text[:4000]}\n"
+                            all_companies_data_prompt += f"\n--- สรุปสเปคชุดที่ {idx+1} ---\n{final_text}\n"
                         
                         prompt = f"""
                         คุณคือผู้เชี่ยวชาญด้านการตรวจรับและจัดทำคุณลักษณะเฉพาะ (TOR Specialist) 
-                        งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(st.session_state.pdf_extracted_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ "ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด" และห้ามระบุชื่อบริษัทใดๆ ทั้งสิ้น แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
+                        งานของคุณคือวิเคราะห์สเปคจากสรุปข้อเสนอที่ผ่านการสกัดมาแล้ว ({len(st.session_state.pdf_extracted_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ "ห้ามระบุชื่อยี่ห้อ รุ่น หรือชื่อบริษัทใดๆ เด็ดขาด" แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาแข่งขันกันได้
 
                         [ลักษณะงานที่ผู้ใช้ต้องการ]:
                         {job_description_pdf}
 
-                        [ข้อมูลเนื้อหาเอกสารสเปคที่ผู้ใช้ส่งมาและตรวจทานแล้ว]:
+                        [สเปคอ้างอิงรายบริษัทที่ผ่านการกรองแล้ว]:
                         {all_companies_data_prompt}
 
                         กรุณาตอบกลับเป็นภาษาไทย โดยใช้รูปแบบ Markdown ที่กระชับ เป็นข้อๆ และเข้าใจง่ายที่สุด ดังนี้:
