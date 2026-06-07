@@ -33,7 +33,6 @@ TYPHOON_MODEL = "typhoon-v2.5-30b-a3b-instruct"
 st.set_page_config(page_title="TOR Workspace", page_icon="🛡️", layout="wide")
 
 _CSS = """
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ════════════════════════════════════════════════
    DESIGN TOKENS
@@ -549,6 +548,7 @@ hr { border-color: var(--border) !important; margin: 32px 0 !important; }
 </style>
 """
 
+st.markdown("""<link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">""", unsafe_allow_html=True)
 st.markdown(_CSS, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
