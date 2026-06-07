@@ -119,7 +119,6 @@ def extract_text_from_pdf(uploaded_file):
         return "".join([page.extract_text() or "" for page in pdf_reader.pages])
     except Exception as e: return ""
 
-# 🛡️ โลคอลรีเจกซ์ตัดข้อมูลล็อกสเปคทันทีตั้งแต่บนเครื่องเพื่อลดขนาดไฟล์และประหยัด Token
 def local_regex_cleaner(text):
     if not text: return ""
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
@@ -145,8 +144,14 @@ def summarize_single_file_with_gemini(cleaned_text):
             gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt,
             config=types.GenerateContentConfig(temperature=0.1)
         )
-        return response.text
-    except Exception: return cleaned_text[:2000]
+        # ✅ จุดแก้ไขที่ 1: ดักจับโครงสร้างข้อมูลจาก SDK ตัวใหม่
+        if hasattr(response, 'text') and response.text:
+            return response.text
+        elif hasattr(response, 'candidates') and response.candidates:
+            return response.candidates[0].content.parts[0].text
+        return "ไม่สามารถสกัดข้อมูลสเปคได้"
+    except Exception: 
+        return cleaned_text[:2000]
 
 def generate_typhoon_stream(prompt_text, section_num, placeholder):
     if not typhoon_client: return ""
@@ -230,7 +235,6 @@ def build_pdf_html_document():
 st.title("🛡️ AI Procurement TOR Workspace")
 st.caption("⚡ Hybrid Core Mode: วิเคราะห์ด้วย Gemini ➔ ร่างข้อกำหนดภาษาราชการเนียนตาด้วย Typhoon")
 
-# 📊 ส่วนที่ 1: ตั้งค่าข้อมูลโครงการหลัก
 st.markdown("## 1. ข้อมูลโครงการทั่วไป")
 col_form1, col_form2 = st.columns(2)
 with col_form1:
@@ -240,9 +244,7 @@ with col_form2:
     p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=5000, value=0)
     p_criteria = st.radio("หลักเกณฑ์การคัดเลือกข้อเสนอ", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True)
 
-# 🔍 ส่วนที่ 2: โฟลว์การประหยัด Token และตรวจสอบเนื้อหาโดยผู้ใช้ก่อนส่ง
 st.markdown("## 2. ขั้นตอนสกัดสเปคอ้างอิงและคัดกรองความโปร่งใส (ประหยัด Token)")
-
 job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้งานจริง:", placeholder="อธิบายเป้าหมายการใช้งานจริงเพื่อนำทาง AI...", height=80)
 
 col_file1, col_file2 = st.columns([3, 1])
@@ -251,21 +253,17 @@ with col_file1:
 with col_file2:
     pre_clean_click = st.button("✂️ ใช้ Regex ตัดและคลีนข้อมูลด่วนก่อน", use_container_width=True)
 
-# เมื่อกดปุ่มคลีนด่วน ระบบจะทำความสะอาดเบื้องต้นด้วยความเร็วสูงโดยไม่ใช้ Token AI
 if uploaded_files and pre_clean_click:
     st.session_state.pdf_pre_cleaned_texts = {}
     with st.spinner("⚡ ระบบกำลังใช้ Regex สับกรองคำล็อกสเปคบนเครื่องให้อย่างรวดเร็ว..."):
         for file in uploaded_files:
             raw_text = extract_text_from_pdf(file)
-            # ตัดข้อมูลขยะและคำเสี่ยงทิ้งด้วย Regex ตัวเดิม
             cleaned_by_regex = local_regex_cleaner(raw_text)
             st.session_state.pdf_pre_cleaned_texts[file.name] = cleaned_by_regex
 
-# ด่านตรวจจับและแก้ไขข้อความโดยมนุษย์ (Human-in-the-loop)
 if st.session_state.pdf_pre_cleaned_texts:
     st.markdown("<div class='token-saving-banner'>💡 ขั้นตอนประหยัด Token: โปรดตรวจสอบและลบชื่อบริษัทหรือข้อมูลล็อกสเปคที่ยังตกค้างในกล่องข้อความด้านล่างนี้แยกตามไฟล์ ก่อนกดส่งไปสรุปด้วย AI</div>", unsafe_allow_html=True)
     
-    # วนลูปสร้างกล่องให้พี่เป็นคนอ่านและเคาะความถูกต้องแยกทีละไฟล์
     for file_name, text_content in list(st.session_state.pdf_pre_cleaned_texts.items()):
         with st.expander(f"📁 ดักกรองเนื้อหาไฟล์: {file_name}", expanded=True):
             user_verified_text = st.text_area(
@@ -274,7 +272,6 @@ if st.session_state.pdf_pre_cleaned_texts:
                 height=180,
                 key=f"user_verify_box_{file_name}"
             )
-            # อัปเดตข้อความกลับเข้าไปตามที่ผู้ใช้แก้ไขจริง
             st.session_state.pdf_pre_cleaned_texts[file_name] = user_verified_text
             
     st.write("")
@@ -287,22 +284,31 @@ if st.session_state.pdf_pre_cleaned_texts:
             final_summarized_list = []
             progress_bar = st.progress(0)
             
-            # รันส่งข้อมูลที่มนุษย์คัดกรองแล้วให้ Gemini สรุปเรียงสเปคแยกกันทีละก้อน เพื่อลดโอกาสโทเคนล้น
             for idx, (file_name, verified_text) in enumerate(st.session_state.pdf_pre_cleaned_texts.items()):
                 st.toast(f"🤖 Gemini กำลังสกัดโครงสร้างข้อมูลไฟล์ที่ {idx+1}...")
                 single_summary = summarize_single_file_with_gemini(verified_text)
                 final_summarized_list.append(f"\n[ร่างสเปคกลางสกัดจากไฟล์ {idx+1}]:\n{single_summary}\n")
                 progress_bar.progress((idx + 1) / len(st.session_state.pdf_pre_cleaned_texts))
                 
-            # นำผลสเปคที่สกัดสั้นๆ แบบคลีนๆ มารวมร่างกันแล้วซิงค์เข้าข้อ 4 ทันที
             with st.spinner("⚙️ กำลังนำสเปคทั้งหมดที่คัดกรองแล้ว ผนวกรวมเข้าสู่ข้อ 4 ของข้อกำหนด TOR..."):
-                all_merged_specs = "".join(final_summarized_list)
-                prompt_merge = f"สรุปและเรียบเรียงข้อกำหนดคุณลักษณะเฉพาะทางเทคนิคเพื่อใส่ใน TOR ข้อ 4 วัตถุประสงค์คือ {job_description_pdf} ข้อมูลสเปคทั้งหมดคือ: {all_merged_specs} เขียนแบ่งหมวดหมู่ย่อย 4.1, 4.2 อย่างเป็นระเบียบ ห้ามมีชื่อคู่ค้าหรือแบรนด์ใดๆ หลงเหลือ"
-                
-                response = call_gemini_with_retry(gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt_merge)
-                st.session_state.ai_drafted_spec_v4 = response.text
-                st.session_state.tor_sections[4] = response.text
-                st.success("🎉 ซิงค์สเปคที่สกัดแบบประหยัด Token เข้าสู่ร่างข้อ 4 เรียบร้อยแล้ว! พี่สามารถเลื่อนลงไปดูได้ที่ข้อ 4 ด้านล่างครับ")
+                try:
+                    all_merged_specs = "".join(final_summarized_list)
+                    prompt_merge = f"สรุปและเรียบเรียงข้อกำหนดคุณลักษณะเฉพาะทางเทคนิคเพื่อใส่ใน TOR ข้อ 4 วัตถุประสงค์คือ {job_description_pdf} ข้อมูลสเปคทั้งหมดคือ: {all_merged_specs} เขียนแบ่งหมวดหมู่ย่อย 4.1, 4.2 อย่างเป็นระเบียบ ห้ามมีชื่อคู่ค้าหรือแบรนด์ใดๆ หลงเหลือ"
+                    
+                    response = call_gemini_with_retry(gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt_merge)
+                    
+                    # ✅ จุดแก้ไขที่ 2: แก้ไขโครงสร้างการดึงข้อความจุดรวมร่างข้อ 4 (บรรทัด 303 เดิม) เพื่อกันแอปแครช
+                    final_text = ""
+                    if hasattr(response, 'text') and response.text:
+                        final_text = response.text
+                    elif hasattr(response, 'candidates') and response.candidates:
+                        final_text = response.candidates[0].content.parts[0].text
+                        
+                    st.session_state.ai_drafted_spec_v4 = final_text
+                    st.session_state.tor_sections[4] = final_text
+                    st.success("🎉 ซิงค์สเปคที่สกัดแบบประหยัด Token เข้าสู่ร่างข้อ 4 เรียบร้อยแล้ว! พี่สามารถเลื่อนลงไปดูได้ที่ข้อ 4 ด้านล่างครับ")
+                except Exception as e: 
+                    st.error(f"เกิดข้อผิดพลาดในการรวบรวมเนื้อหา: {e}")
 
 # 📝 ส่วนที่ 3: ใช้ Typhoon ร่างเนื้อหา 10 ข้อหลัก
 st.markdown("## 3. จัดการขอบเขตงาน TOR 10 ข้อหลัก")
