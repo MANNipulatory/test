@@ -365,7 +365,7 @@ if st.button("✨ ให้ Typhoon เริ่มร่างข้อกำ�
             box_placeholder = st.empty()
             proj_context = f"โครงการ: {p_name}, หน่วยงาน: {p_agency}, งบประมาณ: {p_budget} บาท, เกณฑ์พิจารณา: {p_criteria}"
             specific_prompt = f"จงเขียนเนื้อหาของขอบเขตของงาน (TOR) ตามมาตรฐานราชการไทย ว.159 เฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ของ{proj_context} อธิบายรายละเอียดเชิงระเบียบพัสดุให้ครบถ้วนและสละสลวยที่สุด"
-            generate_typhoon_stream(specific_prompt, i, box_placeholder)
+            generate_typhoon_stream(specific_prompt, i)
             time.sleep(2.0)
         st.balloons()
 
