@@ -24,7 +24,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ผสาน CSS ตกแต่งให้ UI ดูโมเดิร์น มินิมอล และคลีนตาขึ้น
+# ✅ แก้ไขเป็น unsafe_allow_html=True เรียบร้อยครับ
 st.markdown("""
     <style>
         .reportview-container .main .block-container {
@@ -56,7 +56,7 @@ st.markdown("""
             border-radius: 6px !important;
         }
     </style>
-""", unsafe_transform=True)
+""", unsafe_allow_html=True)
 
 TOR_TITLES = {
     1: "ความเป็นมา",
@@ -111,11 +111,8 @@ def clean_redundant_info(text):
     """ใช้ Regex กรองเอาข้อมูลแพทเทิร์นซ้ำซ้อน เช่น เบอร์โทร อีเมล หรือ URL ออกอัตโนมัติหลังบ้าน"""
     if not text:
         return ""
-    # กรองเบอร์โทรศัพท์รูปแบบต่างๆ ออก
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
-    # กรองอีเมลออก
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
-    # กรองลิงก์/URL ออก
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
     return text
 
@@ -209,6 +206,7 @@ with header_col:
     st.title("🛡️ AI Procurement Space")
     st.caption("ระบบบริหารจัดการเอกสาร TOR (ว.159) และวิเคราะห์สเปคกลางอัจฉริยะ")
 with status_col:
+    # ✅ แก้ไขจุดที่ 2 ตรงปุ่มสถานะ Connected เป็น unsafe_allow_html=True
     if client:
         st.markdown("<div style='text-align:right; margin-top:15px;'><span style='background-color:#DCFCE7; color:#15803D; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:500;'>🟢 Connected</span></div>", unsafe_allow_html=True)
     else:
@@ -296,7 +294,7 @@ with tab_gen:
                     st.rerun()
 
 
-# ── แท็บที่ 2: PDF ANALYZER (ดึงไฟล์ -> ลบสิ่งซ้ำซ้อนด้วย Regex หลังบ้าน -> แก้ไขมือในทีเดียว) ──
+# ── แท็บที่ 2: PDF ANALYZER ───────────────────────────────────────
 with tab_pdf_analyze:
     st.write("")
     
@@ -324,12 +322,10 @@ with tab_pdf_analyze:
                 st.session_state.pdf_extracted_texts = {}
                 for file in uploaded_files:
                     raw_text = extract_text_from_pdf(file)
-                    # เรียกใช้ฟังก์ชัน Regex คลีนข้อมูลติดต่อส่วนเกินหลังบ้านทันที
                     cleaned_text = clean_redundant_info(raw_text)
                     st.session_state.pdf_extracted_texts[file.name] = cleaned_text
             st.success("ดึงและจัดระเบียบข้อมูลสำเร็จ! ตรวจสอบความถูกต้องขั้นสุดท้ายที่กล่องข้อความด้านล่าง")
 
-    # 📝 ตรวจทานและแก้ไขทีเดียวจบในหน้านี้ (Human-in-the-loop)
     if st.session_state.pdf_extracted_texts:
         st.write("")
         st.markdown("### 📝 ตรวจทานและแก้ไขเนื้อหาเอกสารด้วยตัวเอง")
@@ -391,7 +387,7 @@ with tab_pdf_analyze:
                         st.error(f"เกิดข้อผิดพลาด: {str(e)}")
 
 
-# ── แท็บที่ 3: INFO ONLY (คำแนะนำและตารางอ้างอิง ว.159) ──────────────────────
+# ── แท็บที่ 3: INFO ONLY ──────────────────────────────────────────
 with tab_setup_info:
     st.write("")
     st.markdown("### 📋 โครงสร้างแนวทาง 10 ข้อหลักตาม ว.159")
