@@ -23,40 +23,70 @@ st.set_page_config(
     layout="wide"
 )
 
-# ปรับปรุง CSS ให้สะอาดตา สบายตา ไม่ฉูดฉาด เน้นความโปร่งและอ่านง่าย
+# 🔥 [DESIGN UPDATE] ปรับแต่ง CSS ใหม่หมดจด: สวยเฉียบ กะทัดรัด รองรับ Dark/Light Theme สมบูรณ์แบบ
 st.markdown("""
     <style>
-        .reportview-container .main .block-container {
-            padding-top: 1.5rem;
-            padding-bottom: 2rem;
+        /* จำกัดความกว้างเนื้อหาหลักไม่ให้แผ่กระจายเต็มจอเกินไปจนเทอะทะ */
+        .block-container {
+            max-width: 1100px !important;
+            padding-top: 1.5rem !important;
+            padding-bottom: 3rem !important;
         }
+        
+        /* ปรับสไตล์หัวข้อ */
         h1 {
-            font-size: 2.2rem !important;
+            font-size: 1.8rem !important;
             font-weight: 700 !important;
-            color: #0F172A;
-            margin-bottom: 0.2rem !important;
+            margin-bottom: 0.1rem !important;
         }
         h2 {
-            font-size: 1.4rem !important;
+            font-size: 1.25rem !important;
             font-weight: 600 !important;
-            color: #1E293B;
-            border-bottom: 2px solid #E2E8F0;
-            padding-bottom: 5px;
             margin-top: 1.5rem !important;
+            margin-bottom: 0.8rem !important;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
         }
+        
+        /* ปรับดีไซน์การจัดกลุ่ม Layout (รองรับ Dark Theme อัตโนมัติด้วยการใช้สีโปร่งแสง) */
+        .step-card {
+            background-color: rgba(128, 128, 128, 0.04);
+            border: 1px solid rgba(128, 128, 128, 0.15);
+            padding: 1.1rem;
+            border-radius: 8px;
+            margin-bottom: 1.2rem;
+        }
+        
+        /* ปรับแต่งความกะทัดรัดของกล่องข้อความ Textarea */
         .stTextArea textarea {
             border-radius: 6px !important;
-            border: 1px solid #CBD5E1 !important;
+            border: 1px solid rgba(128, 128, 128, 0.25) !important;
+            padding: 8px 12px !important;
+            font-size: 0.95rem !important;
         }
-        .stActionButton button {
+        
+        /* ปรับปรุงหน้าตาปุ่มกดให้ดูโมเดิร์น ไม่หนา */
+        .stButton button {
             border-radius: 6px !important;
+            padding: 0.35rem 1rem !important;
+            font-weight: 500 !important;
+            font-size: 0.9rem !important;
         }
-        .step-box {
-            background-color: #F8FAFC;
-            padding: 1.5rem;
-            border-radius: 8px;
-            border-left: 5px solid #3B82F6;
-            margin-bottom: 1.5rem;
+        
+        /* ลูกเล่นกรอบ Expander (ข้อ 1-10) ให้ดูเป็น Card มินิมอล */
+        .streamlit-expanderHeader {
+            border: 1px solid rgba(128, 128, 128, 0.12) !important;
+            border-radius: 6px !important;
+            padding: 8px 12px !important;
+            font-size: 0.95rem !important;
+        }
+        .streamlit-expanderContent {
+            border-left: 1px solid rgba(128, 128, 128, 0.12) !important;
+            border-right: 1px solid rgba(128, 128, 128, 0.12) !important;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.12) !important;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 10px !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -106,13 +136,12 @@ def extract_text_from_pdf(uploaded_file):
         return ""
 
 def clean_redundant_info(text):
-    """ใช้ Regex ดักจับและเซนเซอร์ชื่อบริษัท/ห้างหุ้นส่วน/แบรนด์สินค้า"""
     if not text:
         return ""
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
-    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    text = re.sub(r'(บริษัท\s+[^\s\n]+ coars\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
     text = re.sub(r'บริษัท\s+([A-Za-z0-9เ-แ🏡ก-ฮ\s\.\-\(\)]+?)(?=\s*(?:เสนอ|ราคา|จำกัด|ติดต่อ|\n|$))', "[COMPANY_HIDDEN]", text)
     en_company_pattern = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|Corporation|LLC|Pty\s+Ltd|Group)\b'
     text = re.sub(en_company_pattern, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
@@ -139,14 +168,9 @@ def generate_section_stream(prompt_text, section_num, placeholder):
     if not client: return ""
     full_response = ""
     try:
-        # 🔥 [UPDATE] เพิ่มความยาวของ Output และใช้ระบบ Stream รันภาษาราชการแบบจัดเต็ม
         response_stream = client.models.generate_content_stream(
             model=MODEL_NAME, contents=prompt_text,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT, 
-                temperature=0.5, 
-                max_output_tokens=3000  # เพิ่มข้อความให้ยาวขึ้นจุใจ
-            )
+            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.5, max_output_tokens=3000)
         )
         for chunk in response_stream:
             if chunk.text:
@@ -199,10 +223,11 @@ def create_docx(title, agency, project_type, budget, criteria, sections):
 
 # ── 4. UI RENDER (SINGLE PAGE WORKFLOW) ──────────────────────────
 st.title("🛡️ AI Procurement TOR Workspace")
-st.caption("ระบบรวบรวม วิเคราะห์สเปคกลาง และร่างเอกสาร TOR (ว.159) ครบจบในหน้าเดียว")
+st.caption("ระบบรวบรวม วิเคราะห์สเปคกลาง และร่างเอกสาร TOR (ว.159) ดีไซน์กะทัดรัดระดับมืออาชีพ")
 
 # 📊 ส่วนที่ 1: ตั้งค่าข้อมูลโครงการหลัก
 st.markdown("## 1. ข้อมูลโครงการทั่วไป")
+st.markdown("<div class='step-card'>", unsafe_allow_html=True)
 col_form1, col_form2 = st.columns(2)
 with col_form1:
     p_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", placeholder="เช่น จัดซื้อชุดคอมพิวเตอร์ประมวลผลสูง 30 เครื่อง")
@@ -210,101 +235,102 @@ with col_form1:
 with col_form2:
     p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=5000, value=0)
     p_criteria = st.radio("หลักเกณฑ์การคัดเลือก", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True)
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 🔍 ส่วนที่ 2: ผนึกกำลังวิเคราะห์และคลีนไฟล์สเปค (สำหรับลงข้อ 4 อัตโนมัติ)
 st.markdown("## 2. ระบบวิเคราะห์เอกสารสเปคกลางเพื่อสร้าง TOR ข้อ 4")
-with st.container():
-    st.markdown("<div class='step-box'><b>💡 คำแนะนำงานจัดซื้อ:</b> อัปโหลดไฟล์สเปคหรือใบเสนอราคาจากบริษัทต่างๆ เพื่อให้ AI ลบชื่อแบรนด์/ชื่อบริษัทออก และร่างข้อกำหนดเทคนิคกลาง (ข้อ 4) ให้โดยอัตโนมัติ</div>", unsafe_allow_html=True)
-    
-    job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้จริง (ช่วยนำทาง AI):", placeholder="เช่น ต้องการสร้างห้องปฏิบัติการคอมพิวเตอร์ที่เน้นการประมวลผลโมเดล 3D และงานกราฟิกสเปคสูง...", height=70)
-    
-    uploaded_files = st.file_uploader("เลือกไฟล์ PDF สเปคหรือใบเสนอราคาอ้างอิง (อัปโหลดร่วมกันได้หลายไฟล์)", type=["pdf"], accept_multiple_files=True)
-    
-    if uploaded_files:
-        if st.button("🔓 เริ่มสกัดข้อความ & ซ่อนข้อมูลนิติบุคคลอัตโนมัติ", type="secondary"):
-            with st.spinner("กำลังคลีนข้อมูลนิติบุคคลและย่อยสเปครายบริษัท..."):
-                st.session_state.pdf_extracted_texts = {}
-                for file in uploaded_files:
-                    raw_text = extract_text_from_pdf(file)
-                    cleaned_text = clean_redundant_info(raw_text)
-                    st.session_state.pdf_extracted_texts[file.name] = summarize_single_pdf_spec(cleaned_text)
-            st.success("สกัดสเปคและแปลงข้อมูลลับเรียบร้อยแล้ว!")
+st.markdown("<div class='step-card'>", unsafe_allow_html=True)
+job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้จริง (ช่วยนำทาง AI):", placeholder="เช่น ต้องการสร้างห้องปฏิบัติการคอมพิวเตอร์ที่เน้นการประมวลผลโมเดล 3D และงานกราฟิกสเปคสูง...", height=65)
 
-    if st.session_state.pdf_extracted_texts:
-        st.markdown("### 📝 กล่องตรวจสอบการเซนเซอร์ชื่อบริษัท")
-        for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
-            with st.expander(f"🔎 ตรวจสอบไฟล์ย่อย: {file_name}", expanded=True):
-                user_updated_text = st.text_area("แก้ไขสเปคย่อยท่อนนี้ (หากมีคำหลุดรอด)", value=text_content, height=140, key=f"edit_pdf_{file_name}", label_visibility="collapsed")
-                st.session_state.pdf_extracted_texts[file_name] = user_updated_text
-        
-        check_company = st.checkbox("✅ ตรวจสอบเรียบร้อย: ข้าพเจ้ายืนยันว่าลบรายชื่อบริษัทคู่ค้าและชื่อตราสินค้า (ล็อกสเปค) เกลี้ยงแล้ว")
-        
-        if st.button("📊 สร้างคุณลักษณะเฉพาะ (สเปคกลาง) เข้าสู่ข้อ 4 TOR", type="primary"):
-            if not job_description_pdf:
-                st.warning("⚠️ โปรดระบุวัตถุประสงค์ลักษณะงานก่อน")
-            elif not check_company:
-                st.error("⚠️ โปรดกดยืนยันการตรวจสอบรายชื่อบริษัทด้านบนก่อนดำเนินงาน")
-            else:
-                with st.spinner("AI กำลังสร้างข้อกำหนดสเปคกลางราชการ (ข้อ 4)..."):
-                    try:
-                        all_data = ""
-                        for idx, (f_name, f_text) in enumerate(st.session_state.pdf_extracted_texts.items()):
-                            all_data += f"\n[เอกสารอ้างอิง {idx+1}]\n{f_text}\n"
-                        
-                        prompt = f"""
-                        คุณคือผู้ร่างสเปค TOR มืออาชีพ จงนำข้อมูลด้านล่างนี้ไปเขียนข้อกำหนดคุณลักษณะเฉพาะทางเทคนิคกลางให้ละเอียด ถี่ถ้วน สำหรับลงในข้อ 4 (แบบรูปรายการ หรือคุณลักษณะเฉพาะของพัสดุ)
-                        วัตถุประสงค์โครงการ: {job_description_pdf}
-                        ข้อมูลอ้างอิงจากผู้เสนอราคา: {all_data}
-                        
-                        **กติกากฎหมายพัสดุ**:
-                        - เขียนสเปคและข้อย่อยละเอียดและครบครันที่สุด (เช่น ระบบประมวลผล, หน่วยความจำ, พอร์ตเชื่อมต่อ, มาตรฐานความปลอดภัย)
-                        - แตกหัวข้อย่อยชัดเจน ขึ้นต้นด้วย 4.1, 4.2 ตามระเบียบราชการไทย
-                        - ห้ามระบุชื่อแบรนด์ ยี่ห้อ หรือชื่อบริษัทใดๆ เด็ดขาด! ให้เปลี่ยนเป็นภาษากลางเชิงเทคนิคเท่านั้น
-                        """
-                        response = client.models.generate_content(
-                            model=MODEL_NAME, contents=prompt,
-                            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.3, max_output_tokens=3500)
-                        )
-                        st.session_state.ai_drafted_spec_v4 = response.text
-                        st.session_state.tor_sections[4] = response.text  # ซิงค์เข้า State ข้อ 4 ทันที
-                        st.success("สร้างร่างสเปคกลางเรียบร้อย! ข้อมูลถูกส่งเข้าสู่แบบฟอร์มร่างข้อ 4 ด้านล่างแล้วครับ")
-                    except Exception as e:
-                        st.error(f"เกิดข้อผิดพลาด: {e}")
+col_file1, col_file2 = st.columns([2, 1])
+with col_file1:
+    uploaded_files = st.file_uploader("เลือกไฟล์ PDF สเปคหรือใบเสนอราคาอ้างอิง", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
+with col_file2:
+    process_pdf_click = st.button("🔓 สกัดสเปค & ซ่อนความลับ", use_container_width=True)
+
+if uploaded_files and process_pdf_click:
+    with st.spinner("กำลังคลีนข้อมูลนิติบุคคล..."):
+        st.session_state.pdf_extracted_texts = {}
+        for file in uploaded_files:
+            raw_text = extract_text_from_pdf(file)
+            cleaned_text = clean_redundant_info(raw_text)
+            st.session_state.pdf_extracted_texts[file.name] = summarize_single_pdf_spec(cleaned_text)
+    st.success("สกัดสเปคและแปลงข้อมูลลับเรียบร้อยแล้ว!")
+
+if st.session_state.pdf_extracted_texts:
+    st.markdown("<br><b>📝 กล่องตรวจสอบการเซนเซอร์ชื่อบริษัท:</b>", unsafe_allow_html=True)
+    for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
+        with st.expander(f"🔎 ตรวจสอบไฟล์ย่อย: {file_name}", expanded=False): # ปรับเป็นยุบไว้เพื่อประหยัดพื้นที่หน้าจอ ไม่ดูเทอะทะ
+            user_updated_text = st.text_area("แก้ไขสเปคย่อยท่อนนี้", value=text_content, height=120, key=f"edit_pdf_{file_name}", label_visibility="collapsed")
+            st.session_state.pdf_extracted_texts[file_name] = user_updated_text
+    
+    check_company = st.checkbox("✅ ตรวจสอบเรียบร้อย: ข้าพเจ้ายืนยันว่าลบรายชื่อบริษัทและตราสินค้า (ล็อกสเปค) เกลี้ยงแล้ว")
+    
+    if st.button("📊 บันทึกคุณลักษณะเฉพาะ (สเปคกลาง) เข้าสู่ข้อ 4 TOR", type="primary"):
+        if not job_description_pdf:
+            st.warning("⚠️ โปรดระบุวัตถุประสงค์ลักษณะงานก่อน")
+        elif not check_company:
+            st.error("⚠️ โปรดกดยืนยันการตรวจสอบรายชื่อบริษัทด้านบนก่อนดำเนินงาน")
+        else:
+            with st.spinner("AI กำลังสร้างข้อกำหนดสเปคกลางราชการ (ข้อ 4)..."):
+                try:
+                    all_data = ""
+                    for idx, (f_name, f_text) in enumerate(st.session_state.pdf_extracted_texts.items()):
+                        all_data += f"\n[เอกสารอ้างอิง {idx+1}]\n{f_text}\n"
+                    
+                    prompt = f"""
+                    วิเคราะห์ข้อมูลและร่างสเปคกลางเพื่อนำไปใส่ในเอกสาร TOR ข้อ 4 (แบบรูปรายการ หรือคุณลักษณะเฉพาะของพัสดุ)
+                    วัตถุประสงค์โครงการ: {job_description_pdf}
+                    ข้อมูลอ้างอิงจากผู้เสนอราคา: {all_data}
+                    
+                    เขียนสเปคและข้อย่อยละเอียดและครบครันที่สุด แตกหัวข้อย่อยชัดเจน ขึ้นต้นด้วย 4.1, 4.2 ตามระเบียบราชการไทย ห้ามมีชื่อยี่ห้อและชื่อบริษัทเด็ดขาด
+                    """
+                    response = client.models.generate_content(
+                        model=MODEL_NAME, contents=prompt,
+                        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.3, max_output_tokens=3500)
+                    )
+                    st.session_state.ai_drafted_spec_v4 = response.text
+                    st.session_state.tor_sections[4] = response.text  # ซิงค์เข้า State ข้อ 4 ทันที
+                    st.success("สร้างร่างสเปคกลางเรียบร้อย! ข้อมูลถูกส่งเข้าสู่แบบฟอร์มร่างข้อ 4 ด้านล่างแล้วครับ")
+                except Exception as e:
+                    st.error(f"เกิดข้อผิดพลาด: {e}")
+st.markdown("</div>", unsafe_allow_html=True)
 
 # 📝 ส่วนที่ 3: แบบฟอร์มตรวจทานและร่างเอกสาร TOR 10 ข้อ
 st.markdown("## 3. ตรวจทานและจัดการร่างขอบเขตงาน TOR ทั้ง 10 ข้อ")
 if p_name:
-    st.info(f"📋 โครงการ: {p_name} | งบประมาณ: {p_budget:,} บาท | สัญญา: ซื้อ/จ้างทั่วไป")
+    st.caption(f"📌 กำลังทำงานในโครงการ: **{p_name}** | งบประมาณ: **{p_budget:,} บาท**")
 
-# วนลูปแสดงกล่องข้อความ 10 ข้อหลักแบบกระชับ เรียงกันอ่านง่าย
+# วนลูปแสดงกล่องข้อความ 10 ข้อหลักในรูปแบบ Card ยุบขยายได้ มินิมอล ไม่กินพื้นที่หน้าจอ
 for i in range(1, 11):
     with st.expander(f"🔹 ข้อ {i}: {TOR_TITLES[i]}", expanded=(i==4)):
         current_content = st.session_state.tor_sections.get(i, "")
         
         if i == 4 and st.session_state.ai_drafted_spec_v4:
-            st.caption("🟢 ข้อความนี้ได้รับการซิงค์มาจากระบบวิเคราะห์สเปคกลางด้านบนแล้ว")
+            st.markdown("<span style='color:#10B981; font-size:12px; font-weight:500;'>🟢 ข้อมูลชุดนี้ได้รับการซิงค์มาจากระบบวิเคราะห์สเปคกลางด้านบนแล้ว</span>", unsafe_allow_html=True)
             
-        updated_content = st.text_area(f"เนื้อหาข้อ {i}", value=current_content, height=200, key=f"main_edit_sec_{i}", label_visibility="collapsed")
+        updated_content = st.text_area(f"เนื้อหาข้อ {i}", value=current_content, height=140, key=f"main_edit_sec_{i}", label_visibility="collapsed")
         st.session_state.tor_sections[i] = updated_content
         
-        if st.button(f"🔄 รีเจนเนื้อหาข้อ {i} ใหม่เฉพาะข้อ", key=f"main_regen_btn_{i}"):
-            if not p_name:
-                st.error("กรุณาระบุชื่อโครงการก่อนกดรีเจน")
-            else:
-                box_placeholder = st.empty()
-                spec_prompt = f"จงเขียนทบทวนร่างข้อกำหนดขอบเขตงาน TOR โครงการ '{p_name}' เฉพาะในส่วนของ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ให้ออกมาเป็นข้อๆ ภาษาราชการอย่างละเอียด ถี่ถ้วน เต็มรูปแบบ วงเงินงบประมาณคือ {p_budget} บาท"
-                generate_section_stream(spec_prompt, i, box_placeholder)
-                st.rerun()
+        col_btn1, col_btn2 = st.columns([4, 1])
+        with col_btn2:
+            if st.button(f"🔄 รีเจนเฉพาะข้อ {i}", key=f"main_regen_btn_{i}", use_container_width=True):
+                if not p_name:
+                    st.error("กรุณาระบุชื่อโครงการก่อน")
+                else:
+                    box_placeholder = st.empty()
+                    spec_prompt = f"จงเขียนทบทวนร่างข้อกำหนดขอบเขตงาน TOR โครงการ '{p_name}' เฉพาะในส่วนของ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ให้ออกมาเป็นข้อๆ ภาษาราชการอย่างละเอียด ถี่ถ้วน เต็มรูปแบบ วงเงินงบประมาณคือ {p_budget} บาท"
+                    generate_section_stream(spec_prompt, i, box_placeholder)
+                    st.rerun()
 
 st.write("")
-# 🔥 [UPDATE] ปรับปุ่มสร้างร่างใหม่ทั้งหมดให้ยิงยาวละเอียดยิบทุกข้อ ไม่ข้ามข้อเก่าแล้ว (ยกเว้นข้อ 4)
+# ปุ่มสั่งการยิงเจนยาวพร้อมกัน 10 ข้อหลัก
 if st.button("✨ สั่ง AI ร่างเอกสารทุกข้อที่เหลือพร้อมกันแบบละเอียดยิบ", type="primary", use_container_width=True):
     if not p_name:
         st.error("⚠️ กรุณาระบุชื่อโครงการที่ด้านบนสุดก่อนเริ่มกระบวนการ")
     else:
         st.session_state.meta_data = {"title": p_name, "agency": p_agency, "type": "ซื้อ/จ้างทั่วไป", "budget": p_budget, "criteria": p_criteria}
         for i in range(1, 11):
-            # ข้ามข้อ 4 ไว้เพื่อป้องกันไม่ให้ไปเขียนทับสเปคที่ดึงมาจาก PDF นอกนั้นสั่งรันใหม่แบบยาวทั้งหมด
             if i == 4 and st.session_state.tor_sections[4]:
                 continue
                 
@@ -318,7 +344,7 @@ if st.button("✨ สั่ง AI ร่างเอกสารทุกข้�
             generate_section_stream(specific_prompt, i, box_placeholder)
         st.balloons()
 
-# ⬇️ ส่วนการ Export ออกเป็นไฟล์ใช้งาน
+# ⬇️ ส่วนการ Export ออกเป็นไฟล์ใช้งาน (ปรับปรุงปุ่มให้สวยกะทัดรัดเข้าคู่กัน)
 if st.session_state.meta_data:
     st.markdown("### 💾 ดาวน์โหลดเอกสารผลลัพธ์")
     all_text_export = f"ร่างขอบเขตของงาน (TOR) - {p_name}\n\n"
