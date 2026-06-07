@@ -32,7 +32,7 @@ if typhoon_key:
 else:
     typhoon_client = None
 
-TYPHOON_MODEL = "typhoon-v1.5x-70b-instruct"
+TYPHOON_MODEL = "typhoon-v2.5-30b-a3b-instruct"
 
 st.set_page_config(
     page_title="AI Procurement TOR Workspace",
