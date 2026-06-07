@@ -8,7 +8,7 @@ from google.genai import types
 from google.genai.errors import APIError as GeminiAPIError
 from openai import OpenAI
 import pypdf
-from docx import Document  # 📄 เพิ่ม Library สำหรับเสกไฟล์ Word (.docx)
+from docx import Document
 
 # ── 1. INITIALIZATION (HYBRID CREW) ──────────────────────────────
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
@@ -59,6 +59,16 @@ st.markdown("""
             padding: 20px !important;
             margin-top: 30px;
         }
+        .token-saving-banner {
+            background-color: rgba(16, 185, 129, 0.1) !important;
+            border: 1px solid rgba(16, 185, 129, 0.3) !important;
+            padding: 12px !important;
+            border-radius: 8px !important;
+            color: #047857 !important;
+            font-size: 0.9rem !important;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -81,7 +91,7 @@ SYSTEM_PROMPT = (
 # ── 2. STATE MANAGEMENT ──────────────────────────────────────────
 if "tor_sections" not in st.session_state: st.session_state.tor_sections = {i: "" for i in range(1, 11)}
 if "meta_data" not in st.session_state: st.session_state.meta_data = {}
-if "pdf_extracted_texts" not in st.session_state: st.session_state.pdf_extracted_texts = {}
+if "pdf_pre_cleaned_texts" not in st.session_state: st.session_state.pdf_pre_cleaned_texts = {}
 if "ai_drafted_spec_v4" not in st.session_state: st.session_state.ai_drafted_spec_v4 = ""
 
 # ── 3. HELPERS & GENERATORS ──────────────────────────────────────
@@ -109,31 +119,26 @@ def extract_text_from_pdf(uploaded_file):
         return "".join([page.extract_text() or "" for page in pdf_reader.pages])
     except Exception as e: return ""
 
-# 🛡️ ฟังก์ชันกรองความโปร่งใสตัวเดิม คืนชีพกลับมาทำภารกิจแบบรัดกุม 100%
-def clean_redundant_info(text):
+# 🛡️ โลคอลรีเจกซ์ตัดข้อมูลล็อกสเปคทันทีตั้งแต่บนเครื่องเพื่อลดขนาดไฟล์และประหยัด Token
+def local_regex_cleaner(text):
     if not text: return ""
-    # 1. กรองหมายเลขโทรศัพท์รูปแบบต่างๆ
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
-    # 2. กรองที่อยู่อีเมล
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
-    # 3. กรองลิงก์และ URL
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
-    # 4. กรองชื่อบริษัทภาษาไทย หจก. บมจ. บจก. ทุกรูปแบบโครงสร้าง
-    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
-    # 5. กรองชื่อบริษัทภาษาอังกฤษ (Co., Ltd. / Inc. / Corp.)
+    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)', "[COMPANY_HIDDEN]", text)
     en_company = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|LLC|Group)\b'
     text = re.sub(en_company, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
-    # 6. กรองรายชื่อแบรนด์และเครื่องหมายการค้าชั้นนำ เพื่อป้องกันการล็อกสเปคตามกฎพัสดุ ว.159
     text = re.sub(r'\b(Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei)\b', "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
     return text
 
-def summarize_with_gemini(raw_text):
-    if not gemini_client or not raw_text: return raw_text
+def summarize_single_file_with_gemini(cleaned_text):
+    if not gemini_client or not cleaned_text: return cleaned_text
     prompt = f"""
-    คุณคือผู้ช่วยสกัดข้อมูลทางเทคนิค อ่านข้อความด้านล่างนี้แล้วสรุปเนื้อหาสำคัญเกี่ยวกับ 'รายละเอียดคุณลักษณะเฉพาะทางเทคนิคทั้งหมด' 
-    และ 'เงื่อนไขการรับประกันและการสนับสนุน' โดยรักษาข้อมูลตัวเลขสเปคทางเทคนิคไว้ให้ครบถ้วนที่สุด แต่ตัดพวกเศษขยะหรือชื่อคู่ค้าออก
-    [ข้อมูลเอกสาร]:
-    {raw_text[:12000]}
+    จงสกัดเฉพาะ 'ข้อมูลข้อกำหนดคุณลักษณะเฉพาะทางเทคนิค' และ 'เงื่อนไขการสนับสนุน/การรับประกัน' จากเอกสารที่ผ่านการคลีนแบรนด์มาแล้วด้านล่างนี้
+    สรุปให้กระชับและสั้นที่สุดโดยรักษาข้อมูลตัวเลขทางเทคนิคไว้ครบถ้วน ห้ามเอาเนื้อหาน้ำท่วมทุ่ง เพื่อประหยัดพื้นที่กระดาษ:
+    
+    [เนื้อหาเอกสาร]:
+    {cleaned_text[:12000]}
     """
     try:
         response = call_gemini_with_retry(
@@ -141,7 +146,7 @@ def summarize_with_gemini(raw_text):
             config=types.GenerateContentConfig(temperature=0.1)
         )
         return response.text
-    except Exception: return raw_text[:3000]
+    except Exception: return cleaned_text[:2000]
 
 def generate_typhoon_stream(prompt_text, section_num, placeholder):
     if not typhoon_client: return ""
@@ -162,13 +167,13 @@ def generate_typhoon_stream(prompt_text, section_num, placeholder):
         return full_response
     except Exception as e: return ""
 
-# 📄 [EXPORT GENERATORS] ฟังก์ชันแปลงข้อมูลสำหรับดาวน์โหลดเป็นฟอร์แมตต่างๆ
+# 📄 [EXPORT GENERATORS] 
 def build_word_document():
     doc = Document()
     title_p = doc.add_paragraph()
     title_run = title_p.add_run(f"ร่างขอบเขตของงาน (TOR)\nโครงการ: {st.session_state.meta_data.get('title', 'ไม่ได้ระบุ')}")
     title_run.bold = True
-    title_run.font.size = 203200  # ประมาณ 16pt
+    title_run.font.size = 203200
     
     doc.add_paragraph(f"หน่วยงานเจ้าของโครงการ: {st.session_state.meta_data.get('agency', '-')}")
     doc.add_paragraph(f"วงเงินงบประมาณ: {st.session_state.meta_data.get('budget', 0):,} บาท")
@@ -235,45 +240,69 @@ with col_form2:
     p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=5000, value=0)
     p_criteria = st.radio("หลักเกณฑ์การคัดเลือกข้อเสนอ", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True)
 
-# 🔍 ส่วนที่ 2: ใช้ Gemini สกัดเนื้อหา (ข้อ 4)
-st.markdown("## 2. วิเคราะห์เอกสารสเปคกลางเพื่อสร้าง TOR ข้อ 4")
+# 🔍 ส่วนที่ 2: โฟลว์การประหยัด Token และตรวจสอบเนื้อหาโดยผู้ใช้ก่อนส่ง
+st.markdown("## 2. ขั้นตอนสกัดสเปคอ้างอิงและคัดกรองความโปร่งใส (ประหยัด Token)")
+
 job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้งานจริง:", placeholder="อธิบายเป้าหมายการใช้งานจริงเพื่อนำทาง AI...", height=80)
 
 col_file1, col_file2 = st.columns([3, 1])
 with col_file1:
-    uploaded_files = st.file_uploader("อัปโหลดไฟล์ PDF อ้างอิงสเปค", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
+    uploaded_files = st.file_uploader("อัปโหลดไฟล์ PDF อ้างอิงจากคู่ค้าหลายๆ ราย", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
 with col_file2:
-    process_pdf_click = st.button("🔓 สกัดข้อมูลด้วย Gemini", use_container_width=True)
+    pre_clean_click = st.button("✂️ ใช้ Regex ตัดและคลีนข้อมูลด่วนก่อน", use_container_width=True)
 
-if uploaded_files and process_pdf_click:
-    with st.spinner("🤖 Gemini กำลังวิเคราะห์และคลีนข้อมูลแบรนด์สินค้า..."):
-        st.session_state.pdf_extracted_texts = {}
+# เมื่อกดปุ่มคลีนด่วน ระบบจะทำความสะอาดเบื้องต้นด้วยความเร็วสูงโดยไม่ใช้ Token AI
+if uploaded_files and pre_clean_click:
+    st.session_state.pdf_pre_cleaned_texts = {}
+    with st.spinner("⚡ ระบบกำลังใช้ Regex สับกรองคำล็อกสเปคบนเครื่องให้อย่างรวดเร็ว..."):
         for file in uploaded_files:
             raw_text = extract_text_from_pdf(file)
-            cleaned_text = clean_redundant_info(raw_text)
-            st.session_state.pdf_extracted_texts[file.name] = summarize_with_gemini(cleaned_text)
+            # ตัดข้อมูลขยะและคำเสี่ยงทิ้งด้วย Regex ตัวเดิม
+            cleaned_by_regex = local_regex_cleaner(raw_text)
+            st.session_state.pdf_pre_cleaned_texts[file.name] = cleaned_by_regex
 
-if st.session_state.pdf_extracted_texts:
-    for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
-        with st.expander(f"🔎 ผลลัพธ์การสกัดสเปคอ้างอิง: {file_name}", expanded=False):
-            user_updated_text = st.text_area("แก้ไขเนื้อหาเพิ่มเติม", value=text_content, height=120, key=f"edit_pdf_{file_name}", label_visibility="collapsed")
-            st.session_state.pdf_extracted_texts[file_name] = user_updated_text
+# ด่านตรวจจับและแก้ไขข้อความโดยมนุษย์ (Human-in-the-loop)
+if st.session_state.pdf_pre_cleaned_texts:
+    st.markdown("<div class='token-saving-banner'>💡 ขั้นตอนประหยัด Token: โปรดตรวจสอบและลบชื่อบริษัทหรือข้อมูลล็อกสเปคที่ยังตกค้างในกล่องข้อความด้านล่างนี้แยกตามไฟล์ ก่อนกดส่งไปสรุปด้วย AI</div>", unsafe_allow_html=True)
     
-    check_company = st.checkbox("ข้าพเจ้ายืนยันว่าได้ตรวจสอบความโปร่งใสและตัดข้อมูลล็อกสเปคแล้ว")
+    # วนลูปสร้างกล่องให้พี่เป็นคนอ่านและเคาะความถูกต้องแยกทีละไฟล์
+    for file_name, text_content in list(st.session_state.pdf_pre_cleaned_texts.items()):
+        with st.expander(f"📁 ดักกรองเนื้อหาไฟล์: {file_name}", expanded=True):
+            user_verified_text = st.text_area(
+                "พี่สามารถพิมพ์ลบหรือแก้ไขเนื้อหาข้อความตรงนี้เพิ่มเติมได้โดยตรง:",
+                value=text_content,
+                height=180,
+                key=f"user_verify_box_{file_name}"
+            )
+            # อัปเดตข้อความกลับเข้าไปตามที่ผู้ใช้แก้ไขจริง
+            st.session_state.pdf_pre_cleaned_texts[file_name] = user_verified_text
+            
+    st.write("")
+    check_confirmation = st.checkbox("ข้าพเจ้ายืนยันว่าได้ทำการตรวจสอบ/ลบรายชื่อแบรนด์ที่ตกค้างเสร็จสิ้นแล้ว และต้องการให้ Gemini เริ่มสกัดสเปค")
     
-    if st.button("📊 บันทึกสเปคกลางเข้าสู่ข้อ 4 TOR", type="primary"):
+    if st.button("🚀 ส่งข้อมูลที่ผ่านการกรองแล้วไปสกัดสเปคด้วย Gemini แยกไฟล์", type="primary", use_container_width=True):
         if not job_description_pdf: st.warning("⚠️ โปรดระบุวัตถุประสงค์ลักษณะงานก่อน")
-        elif not check_company: st.error("⚠️ โปรดกดยืนยันการตรวจสอบความโปร่งใสก่อน")
+        elif not check_confirmation: st.error("⚠️ โปรดคลิกกล่องยืนยันการตรวจสอบความโปร่งใสด้านบนก่อนครับ")
         else:
-            with st.spinner("🤖 สรุปรวมข้อมูลเข้าสู่ข้อ 4 ด้วย Gemini..."):
-                try:
-                    all_data = "".join([f"\n[เอกสารอ้างอิง]\n{t}\n" for t in st.session_state.pdf_extracted_texts.values()])
-                    prompt = f"วิเคราะห์และร่างสเปคกลางใส่ใน TOR ข้อ 4 วัตถุประสงค์คือ {job_description_pdf} ข้อมูลจากผู้เสนอคือ {all_data} เขียนแบ่งข้อย่อย 4.1, 4.2 อย่างละเอียดและห้ามมีชื่อแบรนด์เด็ดขาด"
-                    response = call_gemini_with_retry(gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt)
-                    st.session_state.ai_drafted_spec_v4 = response.text
-                    st.session_state.tor_sections[4] = response.text
-                    st.success("ซิงค์สเปคเข้าสู่ร่างข้อ 4 เรียบร้อยแล้ว!")
-                except Exception as e: st.error(f"เกิดข้อผิดพลาด: {e}")
+            final_summarized_list = []
+            progress_bar = st.progress(0)
+            
+            # รันส่งข้อมูลที่มนุษย์คัดกรองแล้วให้ Gemini สรุปเรียงสเปคแยกกันทีละก้อน เพื่อลดโอกาสโทเคนล้น
+            for idx, (file_name, verified_text) in enumerate(st.session_state.pdf_pre_cleaned_texts.items()):
+                st.toast(f"🤖 Gemini กำลังสกัดโครงสร้างข้อมูลไฟล์ที่ {idx+1}...")
+                single_summary = summarize_single_file_with_gemini(verified_text)
+                final_summarized_list.append(f"\n[ร่างสเปคกลางสกัดจากไฟล์ {idx+1}]:\n{single_summary}\n")
+                progress_bar.progress((idx + 1) / len(st.session_state.pdf_pre_cleaned_texts))
+                
+            # นำผลสเปคที่สกัดสั้นๆ แบบคลีนๆ มารวมร่างกันแล้วซิงค์เข้าข้อ 4 ทันที
+            with st.spinner("⚙️ กำลังนำสเปคทั้งหมดที่คัดกรองแล้ว ผนวกรวมเข้าสู่ข้อ 4 ของข้อกำหนด TOR..."):
+                all_merged_specs = "".join(final_summarized_list)
+                prompt_merge = f"สรุปและเรียบเรียงข้อกำหนดคุณลักษณะเฉพาะทางเทคนิคเพื่อใส่ใน TOR ข้อ 4 วัตถุประสงค์คือ {job_description_pdf} ข้อมูลสเปคทั้งหมดคือ: {all_merged_specs} เขียนแบ่งหมวดหมู่ย่อย 4.1, 4.2 อย่างเป็นระเบียบ ห้ามมีชื่อคู่ค้าหรือแบรนด์ใดๆ หลงเหลือ"
+                
+                response = call_gemini_with_retry(gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt_merge)
+                st.session_state.ai_drafted_spec_v4 = response.text
+                st.session_state.tor_sections[4] = response.text
+                st.success("🎉 ซิงค์สเปคที่สกัดแบบประหยัด Token เข้าสู่ร่างข้อ 4 เรียบร้อยแล้ว! พี่สามารถเลื่อนลงไปดูได้ที่ข้อ 4 ด้านล่างครับ")
 
 # 📝 ส่วนที่ 3: ใช้ Typhoon ร่างเนื้อหา 10 ข้อหลัก
 st.markdown("## 3. จัดการขอบเขตงาน TOR 10 ข้อหลัก")
@@ -283,7 +312,7 @@ for i in range(1, 11):
     with st.expander(f"📌 ข้อ {i}: {TOR_TITLES[i]}", expanded=(i==4)):
         current_content = st.session_state.tor_sections.get(i, "")
         if i == 4 and st.session_state.ai_drafted_spec_v4:
-            st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคทางเทคนิคเรียบร้อยแล้ว</small>", unsafe_allow_html=True)
+            st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคทางเทคนิคที่ผ่านการตรวจสอบโดยสมบูรณ์แล้ว</small>", unsafe_allow_html=True)
             
         updated_content = st.text_area(f"เนื้อหาข้อ {i}", value=current_content, height=160, key=f"main_edit_sec_{i}", label_visibility="collapsed")
         st.session_state.tor_sections[i] = updated_content
