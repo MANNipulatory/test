@@ -19,12 +19,45 @@ else:
 MODEL_NAME = "gemini-2.5-flash"
 
 st.set_page_config(
-    page_title="TOR (ว.159) & AI วิเคราะห์สเปคกลาง (Gemini)",
+    page_title="AI TOR & Spec Analyzer",
     page_icon="🛡️",
     layout="wide"
 )
 
-# ระบบหัวข้อมาตรฐาน 10 ข้อ ตาม ว.159
+# ผสาน CSS ตกแต่งให้ UI ดูโมเดิร์น มินิมอล และคลีนตาขึ้น
+st.markdown("""
+    <style>
+        .reportview-container .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        h1 {
+            font-size: 2.2rem !important;
+            font-weight: 700 !important;
+            color: #1E293B;
+            margin-bottom: 0.5rem !important;
+        }
+        h2 {
+            font-size: 1.5rem !important;
+            font-weight: 600 !important;
+            color: #334155;
+        }
+        h3 {
+            font-size: 1.15rem !important;
+            font-weight: 600 !important;
+            color: #475569;
+        }
+        .stTextArea textarea {
+            border-radius: 8px !important;
+        }
+        .streamlit-expanderHeader {
+            font-weight: 500 !important;
+            background-color: #F8FAFC !important;
+            border-radius: 6px !important;
+        }
+    </style>
+""", unsafe_transform=True)
+
 TOR_TITLES = {
     1: "ความเป็นมา",
     2: "วัตถุประสงค์",
@@ -38,7 +71,6 @@ TOR_TITLES = {
     10: "ข้อสงวนสิทธิ์ในการยื่นข้อเสนอและอื่นๆ"
 }
 
-# ── 2. SYSTEM PROMPT FOR TOR GENERATOR (ว.159) ─────────────────────
 SYSTEM_PROMPT = (
     "คุณคือผู้เชี่ยวชาญด้านการจัดซื้อจัดจ้างภาครัฐไทย "
     "ที่มีความเชี่ยวชาญในการร่างขอบเขตของงาน (TOR) "
@@ -60,14 +92,11 @@ if "tor_sections" not in st.session_state:
     st.session_state.tor_sections = {i: "" for i in range(1, 11)}
 if "meta_data" not in st.session_state:
     st.session_state.meta_data = {}
-# สร้าง Session State สำหรับเก็บข้อความ PDF ที่สแกนและคัดกรองคำแล้ว
-if "pdf_censored_texts" not in st.session_state:
-    st.session_state.pdf_censored_texts = {}
+if "pdf_extracted_texts" not in st.session_state:
+    st.session_state.pdf_extracted_texts = {}
 
 # ── 4. HELPER FUNCTIONS ──────────────────────────────────────────
-
 def extract_text_from_pdf(uploaded_file):
-    """ฟังก์ชันสำหรับอ่านข้อความจากไฟล์ PDF"""
     try:
         pdf_reader = pypdf.PdfReader(uploaded_file)
         text = ""
@@ -78,29 +107,79 @@ def extract_text_from_pdf(uploaded_file):
         st.error(f"ไม่สามารถอ่านไฟล์ {uploaded_file.name} ได้: {e}")
         return ""
 
-def auto_censor_text(text, custom_company="", custom_phone=""):
-    """ฟังก์ชันระบบคัดกรองอัตโนมัติรอบแรก (Regex)"""
+def clean_redundant_info(text):
+    """ใช้ Regex กรองเอาข้อมูลแพทเทิร์นซ้ำซ้อน เช่น เบอร์โทร อีเมล หรือ URL ออกอัตโนมัติหลังบ้าน"""
     if not text:
         return ""
-    # ซ่อนเบอร์โทรศัพท์ อีเมล และ URL เว็บไซต์พื้นฐาน
+    # กรองเบอร์โทรศัพท์รูปแบบต่างๆ ออก
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
+    # กรองอีเมลออก
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
+    # กรองลิงก์/URL ออก
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
-    
-    # ซ่อนคำเฉพาะที่ผู้ใช้พิมพ์สั่งเพิ่มเติม (ถ้ามี)
-    if custom_company and custom_company.strip():
-        text = re.sub(re.escape(custom_company.strip()), "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
-    if custom_phone and custom_phone.strip():
-        text = text.replace(custom_phone.strip(), "[PHONE_HIDDEN]")
-        
     return text
 
-def generate_section_stream(prompt_text, section_num, placeholder):
-    """ฟังก์ชันยิง Gemini API แบบ Stream เพื่อร่าง TOR 10 ข้อ"""
-    if not client:
-        st.error("❌ ไม่พบคีย์เชื่อมต่อ Gemini API กรุณาตั้งค่าคีย์ในแท็บตั้งค่าระบบ")
-        return ""
+def create_docx(title, agency, project_type, budget, criteria, sections):
+    try:
+        from docx import Document
+        from docx.shared import Pt, Cm
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+    except ImportError:
+        return None
+
+    doc = Document()
+    sec = doc.sections[0]
+    sec.page_width = Cm(21); sec.page_height = Cm(29.7)
+    sec.left_margin = Cm(3); sec.right_margin = Cm(2)
+    sec.top_margin = Cm(2.5); sec.bottom_margin = Cm(2.5)
+
+    FONT = "TH Sarabun New"
+
+    def set_font(run, size=16, bold=False):
+        run.bold = bold; run.font.size = Pt(size)
+        rPr = run._element.get_or_add_rPr()
+        rFonts = rPr.find(qn('w:rFonts'))
+        if rFonts is None:
+            rFonts = OxmlElement('w:rFonts')
+            rPr.insert(0, rFonts)
+        for attr in ('w:ascii', 'w:hAnsi', 'w:cs', 'w:eastAsia'):
+            rFonts.set(qn(attr), FONT)
+
+    p = doc.add_paragraph()
+    run = p.add_run("ร่างขอบเขตของงาน (Terms of Reference)"); set_font(run, 20, True); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p = doc.add_paragraph()
+    run = p.add_run(title); set_font(run, 18, True); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
+    meta = [
+        ("อ้างอิง", "หนังสือเวียน กค (กวจ) 0405.4/ว 159 ลงวันที่ 20 มีนาคม 2566"),
+        ("หน่วยงาน", agency), ("ประเภทงาน", project_type),
+        ("วงเงินงบประมาณ", f"{budget:,} บาท" if budget else "-"), ("หลักเกณฑ์", criteria)
+    ]
+    for label, value in meta:
+        if value:
+            p = doc.add_paragraph()
+            r1 = p.add_run(f"{label}: "); set_font(r1, 16, True)
+            r2 = p.add_run(str(value)); set_font(r2, 16, False)
+
+    for num, content in sections.items():
+        p = doc.add_paragraph()
+        r = p.add_run(f"ข้อ {num} {TOR_TITLES[num]}"); set_font(r, 16, True)
+        for line in content.strip().split("\n"):
+            line = line.strip()
+            if not line: continue
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Cm(1)
+            r_line = p.add_run(line); set_font(r_line, 16)
+            
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0)
+    return buf
+
+def generate_section_stream(prompt_text, section_num, placeholder):
+    if not client:
+        st.error("❌ ไม่พบคีย์เชื่อมต่อ Gemini API")
+        return ""
     full_response = ""
     try:
         response_stream = client.models.generate_content_stream(
@@ -113,397 +192,212 @@ def generate_section_stream(prompt_text, section_num, placeholder):
                 max_output_tokens=1500
             )
         )
-        
         for chunk in response_stream:
             if chunk.text:
                 full_response += chunk.text
                 placeholder.code(full_response + "▌", language="text")
-        
         placeholder.code(full_response, language="text")
         st.session_state.tor_sections[section_num] = full_response
         return full_response
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลข้อ {section_num}: {e}")
+        st.error(f"เกิดข้อผิดพลาดข้อ {section_num}: {e}")
         return ""
 
-def create_docx(title, agency, project_type, budget, criteria, sections):
-    """ฟังก์ชันสร้างไฟล์ Word (.docx) มาตรฐานราชการไทย"""
-    try:
-        from docx import Document
-        from docx.shared import Pt, Cm
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-        from docx.oxml.ns import qn
-        from docx.oxml import OxmlElement
-    except ImportError:
-        st.error("กรุณาเพิ่ม python-docx ลงในไฟล์ requirements.txt")
-        return None
-
-    doc = Document()
-    sec = doc.sections[0]
-    sec.page_width = Cm(21)
-    sec.page_height = Cm(29.7)
-    sec.left_margin = Cm(3)
-    sec.right_margin = Cm(2)
-    sec.top_margin = Cm(2.5)
-    sec.bottom_margin = Cm(2.5)
-
-    FONT = "TH Sarabun New"
-
-    def set_font(run, size=16, bold=False):
-        run.bold = bold
-        run.font.size = Pt(size)
-        rPr = run._element.get_or_add_rPr()
-        rFonts = rPr.find(qn('w:rFonts'))
-        if rFonts is None:
-            rFonts = OxmlElement('w:rFonts')
-            rPr.insert(0, rFonts)
-        for attr in ('w:ascii', 'w:hAnsi', 'w:cs', 'w:eastAsia'):
-            rFonts.set(qn(attr), FONT)
-
-    def add_text(para, text, bold=False, size=16, align=None):
-        run = para.add_run(text)
-        set_font(run, size=size, bold=bold)
-        if align:
-            para.alignment = align
-        return run
-
-    p = doc.add_paragraph()
-    add_text(p, "ร่างขอบเขตของงาน (Terms of Reference)", bold=True, size=20, align=WD_ALIGN_PARAGRAPH.CENTER)
-    p = doc.add_paragraph()
-    add_text(p, title, bold=True, size=18, align=WD_ALIGN_PARAGRAPH.CENTER)
-    doc.add_paragraph()
-
-    meta = [
-        ("อ้างอิง", "หนังสือเวียน กค (กวจ) 0405.4/ว 159 ลงวันที่ 20 มีนาคม 2566"),
-        ("หน่วยงาน", agency),
-        ("ประเภทงาน", project_type),
-        ("วงเงินงบประมาณ", f"{budget:,} บาท" if budget else "-"),
-        ("หลักเกณฑ์", criteria),
-        ("วันที่สร้าง", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-    ]
-    for label, value in meta:
-        if value:
-            p = doc.add_paragraph()
-            add_text(p, f"{label}: ", bold=True, size=16)
-            add_text(p, str(value), bold=False, size=16)
-    doc.add_paragraph()
-
-    for num, content in sections.items():
-        p = doc.add_paragraph()
-        add_text(p, f"ข้อ {num} {TOR_TITLES[num]}", bold=True, size=16)
-        
-        for line in content.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            
-            line_no_num = re.sub(r'^(ข้อ\s*)?\d+[\.\s]*', '', line).strip()
-            title_words = set(re.sub(r'[/\-]', ' ', TOR_TITLES[num]).split())
-            line_words = set(re.sub(r'[/\-]', ' ', line_no_num).split())
-            if title_words and line_words:
-                overlap = len(title_words & line_words) / len(line_words)
-                if overlap >= 0.6 and len(line_no_num) < 60:
-                    continue
-            
-            line = re.sub(r'[ \t]+', ' ', line).strip()
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            p.paragraph_format.left_indent = Cm(1)
-            p.paragraph_format.space_after = Pt(4)
-            add_text(p, line, size=16)
-        doc.add_paragraph()
-
-    p = doc.add_paragraph()
-    add_text(p, "หมายเหตุ: ", bold=True, size=14)
-    add_text(p, "โครงร่างนี้เป็นแนวทางเบื้องต้น เจ้าหน้าที่ผู้รับผิดชอบต้องตรวจสอบและแก้ไขก่อนนำไปใช้งาน", size=14)
-
-    buf = io.BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf
-
 # ── 5. STREAMLIT NATIVE UI ───────────────────────────────────────
-st.title("🛡️ ระบบ AI บริหารจัดการเอกสาร TOR และวิเคราะห์สเปคกลาง")
-st.caption("ระบบรวมฟังก์ชันการจัดทำ TOR 10 ข้อหลัก (ว.159) และตรวจเทียบใบเสนอราคาเพื่อทำร่างสเปคกลาง")
-
-# ส่วนแสดงสถานะ API Key ด้านขวาบน
-status_col1, status_col2 = st.columns([4, 1])
-with status_col2:
+header_col, status_col = st.columns([5, 1])
+with header_col:
+    st.title("🛡️ AI Procurement Space")
+    st.caption("ระบบบริหารจัดการเอกสาร TOR (ว.159) และวิเคราะห์สเปคกลางอัจฉริยะ")
+with status_col:
     if client:
-        st.success("🟢 Connected (Gemini)")
+        st.markdown("<div style='text-align:right; margin-top:15px;'><span style='background-color:#DCFCE7; color:#15803D; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:500;'>🟢 Connected</span></div>", unsafe_allow_html=True)
     else:
-        st.error("🔴 Disconnected (No Key)")
+        st.markdown("<div style='text-align:right; margin-top:15px;'><span style='background-color:#FEE2E2; color:#B91C1C; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:500;'>🔴 No Key</span></div>", unsafe_allow_html=True)
+
+st.write("")
 
 tab_gen, tab_pdf_analyze, tab_setup_info = st.tabs([
-    "📝 1. เจนโครงร่าง 10 หัวข้อ (ว.159)", 
-    "📊 2. วิเคราะห์เปรียบเทียบ PDF สเปคกลาง", 
-    "⚙️ ตั้งค่าระบบ & ข้อมูล ว.159"
+    "📝 ร่างโครงร่าง TOR (ว.159)", 
+    "📊 วิเคราะห์ไฟล์ PDF สเปคกลาง", 
+    "📋 ข้อมูลอ้างอิง ว.159"
 ])
 
 # ── แท็บที่ 1: GENERATOR (ว.159) ───────────────────────────────────
 with tab_gen:
-    if not client:
-        st.warning("⚠️ ยังไม่ได้เชื่อมต่อระบบ — กรุณาตั้งค่า API Key ในแท็บขวาสุดเพื่อเปิดใช้งานระบบ AI")
-        
-    st.subheader("📄 เครื่องมือสร้างโครงร่าง TOR ตามหนังสือ ว.159")
-    mode = st.radio("เลือกโหมดการทำงาน", ["⚡ โหมดด่วน — บอก AI เลย", "📋 โหมดละเอียด — กรอกฟอร์ม"], horizontal=True)
+    st.write("")
+    mode = st.radio("รูปแบบการระบุข้อมูล :", ["⚡ โหมดด่วน (อธิบายแนวคิดโครงการ)", "📋 โหมดฟอร์มละเอียด (ระบุรายหัวข้อ)"], horizontal=True, label_visibility="collapsed")
     
-    if "⚡ โหมดด่วน" in mode:
-        st.markdown("**✨ อธิบายโครงการแล้วให้ AI สร้าง TOR ทั้ง 10 ข้อให้เลย**")
-        project_desc = st.text_area(
-            "รายละเอียดโครงการ",
-            placeholder="เช่น: ต้องการจัดซื้อคอมพิวเตอร์สำหรับทำงานเอกสารทั่วไป จำนวน 10 เครื่อง งบประมาณ 500,000 บาท...",
-            height=120,
-            key="quick_desc"
-        )
-        quick_name = st.text_input("ชื่อโครงการ (ย่อ) *", key="q_name")
-        quick_budget = st.number_input("วงเงินงบประมาณ (บาท)", min_value=0, step=10000, value=0, key="q_budget")
-        
-        p_name = quick_name
-        p_type = "ซื้อ/จ้างทั่วไป"
-        p_agency = "หน่วยงานภาครัฐ"
-        p_budget = quick_budget
-        p_criteria = "เกณฑ์ราคา"
-    else:
-        st.markdown("**📋 กรอกรายละเอียดฟอร์มแบบละเอียด**")
-        p_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", placeholder="เช่น จัดซื้อคอมพิวเตอร์ หรือ จ้างสำรวจพื้นที่", key="detailed_name")
-        
-        col_form1, col_form2 = st.columns(2)
-        with col_form1:
-            p_type = st.selectbox("ประเภทงาน *", ["ซื้อ/จ้างทั่วไป", "จ้างที่ปรึกษา", "จ้างออกแบบหรือควบคุมงานก่อสร้าง", "จ้างก่อสร้าง", "จ้างสำรวจ/ศึกษา/วิจัย"], key="d_type")
-            p_agency = st.text_input("หน่วยงาน / ส่วนราชการ", placeholder="เช่น กรมชลประทาน", key="d_agency")
-        with col_form2:
-            p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=1000, value=0, key="d_budget")
-            p_duration = st.number_input("ระยะเวลาดำเนินการ (วัน)", min_value=1, value=90, key="d_dur")
+    with st.container():
+        if "⚡ โหมดด่วน" in mode:
+            quick_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", key="q_name", placeholder="เช่น จัดซื้อคอมพิวเตอร์สำนักงาน 10 เครื่อง")
+            col_q1, col_q2 = st.columns([2, 1])
+            with col_q1:
+                project_desc = st.text_area("อธิบายรายละเอียดโครงการสั้นๆ พอสังเขป", placeholder="ต้องการสเปคสำหรับงานเอกสารทั่วไป ประกันอย่างน้อย 2 ปี...", height=80, key="quick_desc")
+            with col_q2:
+                quick_budget = st.number_input("วงเงินงบประมาณ (บาท)", min_value=0, step=10000, value=0, key="q_budget")
             
-        p_criteria = st.radio("หลักเกณฑ์คัดเลือกข้อเสนอ", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True, key="d_crit")
-        project_desc = f"โครงการ: {p_name}, ประเภท: {p_type}, หน่วยงาน: {p_agency}, งบประมาณ: {p_budget} บาท, หลักเกณฑ์: {p_criteria}"
-
-    if st.button("⚡ สร้างโครงร่าง TOR ทั้ง 10 ข้อ", type="primary", use_container_width=True):
-        if not p_name:
-            st.error("⚠️ กรุณาระบุชื่อโครงการก่อนเริ่มต้นทำงาน")
+            p_name = quick_name; p_type = "ซื้อ/จ้างทั่วไป"; p_agency = "หน่วยงานภาครัฐ"; p_budget = quick_budget; p_criteria = "เกณฑ์ราคา"
         else:
-            st.session_state.meta_data = {
-                "title": p_name, "agency": p_agency, "type": p_type, "budget": p_budget, "criteria": p_criteria
-            }
-            st.success(f"กำลังเริ่มประมวลผลโครงร่างโครงการด้วย Gemini: {p_name}")
+            p_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", placeholder="เช่น โครงการจ้างพัฒนาระบบสารสนเทศ...", key="detailed_name")
+            col_form1, col_form2 = st.columns(2)
+            with col_form1:
+                p_type = st.selectbox("ประเภทงาน *", ["ซื้อ/จ้างทั่วไป", "จ้างที่ปรึกษา", "จ้างก่อสร้าง", "จ้างสำรวจ/ศึกษา/วิจัย"])
+                p_agency = st.text_input("หน่วยงาน / ส่วนราชการ", placeholder="เช่น กรมชลประทาน")
+            with col_form2:
+                p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=1000, value=0)
+                p_criteria = st.radio("หลักเกณฑ์คัดเลือกข้อเสนอ", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True)
+            project_desc = f"โครงการ: {p_name}, ประเภท: {p_type}, หน่วยงาน: {p_agency}, งบประมาณ: {p_budget} บาท, หลักเกณฑ์: {p_criteria}"
+
+    st.write("")
+    if st.button("✨ เริ่มร่างขอบเขตงาน TOR ทั้ง 10 ข้อ", type="primary", use_container_width=True):
+        if not p_name:
+            st.error("⚠️ กรุณาระบุชื่อโครงการก่อนเริ่มกระบวนการ")
+        else:
+            st.session_state.meta_data = {"title": p_name, "agency": p_agency, "type": p_type, "budget": p_budget, "criteria": p_criteria}
             
             for i in range(1, 11):
-                st.markdown(f"### ⚙️ กำลังร่าง ข้อ {i}: {TOR_TITLES[i]}")
+                st.markdown(f"📍 **กำลังร่างข้อที่ {i}: {TOR_TITLES[i]}**")
                 box_placeholder = st.empty()
-                
-                specific_prompt = (
-                    f"จงเขียนเนื้อหาของขอบเขตของงาน (TOR) สำหรับโครงการ '{p_name}' "
-                    f"เฉพาะในส่วนของ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' เท่านั้น "
-                    f"โดยอ้างอิงจากข้อมูลบริบทโครงการดังนี้: {project_desc}"
-                )
+                specific_prompt = f"จงเขียนเนื้อหาของขอบเขตของงาน (TOR) สำหรับโครงการ '{p_name}' เฉพาะในส่วนของ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' เท่านั้น โดยอ้างอิงจากข้อมูลบริบทโครงการดังนี้: {project_desc}"
                 generate_section_stream(specific_prompt, i, box_placeholder)
             st.balloons()
 
     if st.session_state.meta_data:
-        st.divider()
-        st.subheader("📊 สรุปผลลัพธ์โครงร่างเอกสาร TOR (ว.159)")
+        st.write("")
+        st.subheader("📋 ตรวจสอบและดาวน์โหลดเอกสาร")
         
         meta_info = st.session_state.meta_data
-        c1, c2, c3 = st.columns(3)
-        c1.metric("💰 วงเงินงบประมาณ", f"{meta_info['budget']:,} บาท")
-        c2.metric("📁 ประเภทงาน", meta_info['type'])
-        c3.metric("⚖️ หลักเกณฑ์คัดเลือก", meta_info['criteria'])
+        m1, m2, m3 = st.columns(3)
+        m1.metric("งบประมาณโครงการ", f"{meta_info['budget']:,} บาท")
+        m2.metric("ประเภทสัญญา", meta_info['type'])
+        m3.metric("เกณฑ์คัดเลือก", meta_info['criteria'])
         
-        st.markdown("#### ⬇️ ส่งออกเอกสาร")
-        dl_col1, dl_col2 = st.columns(2)
-        
+        dl1, dl2 = st.columns(2)
         all_text = f"ร่างขอบเขตของงาน (TOR) - {meta_info['title']}\n\n"
         for idx, ct in st.session_state.tor_sections.items():
             all_text += f"ข้อ {idx} {TOR_TITLES[idx]}\n{ct}\n\n"
             
-        dl_col1.download_button(
-            label="⬇️ ดาวน์โหลดเป็นไฟล์ .txt",
-            data=all_text,
-            file_name=f"TOR_{meta_info['title']}.txt",
-            mime="text/plain",
-            use_container_width=True
-        )
+        dl1.download_button("⬇️ Export เป็น .TXT", data=all_text, file_name=f"TOR_{meta_info['title']}.txt", mime="text/plain", use_container_width=True)
         
-        docx_buf = create_docx(
-            meta_info['title'], meta_info['agency'], meta_info['type'], 
-            meta_info['budget'], meta_info['criteria'], st.session_state.tor_sections
-        )
+        docx_buf = create_docx(meta_info['title'], meta_info['agency'], meta_info['type'], meta_info['budget'], meta_info['criteria'], st.session_state.tor_sections)
         if docx_buf:
-            dl_col2.download_button(
-                label="📄 ดาวน์โหลดเป็นไฟล์ Word (.docx)",
-                data=docx_buf,
-                file_name=f"TOR_{meta_info['title']}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+            dl2.download_button("📄 Export เป็น Word (.docx)", data=docx_buf, file_name=f"TOR_{meta_info['title']}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
-        st.markdown("#### 📝 ตรวจสอบและแก้ไขเนื้อหารายข้อ")
+        st.write("")
         for i in range(1, 11):
-            with st.expander(f"ข้อ {i}: {TOR_TITLES[i]}", expanded=True):
+            with st.expander(f"ข้อ {i}: {TOR_TITLES[i]}", expanded=False):
                 current_val = st.session_state.tor_sections.get(i, "")
-                updated_val = st.text_area(f"แก้ไขเนื้อหา ข้อ {i}", value=current_val, key=f"edit_sec_{i}", height=150, label_visibility="collapsed")
+                updated_val = st.text_area("แก้ไขเนื้อหา", value=current_val, key=f"edit_sec_{i}", height=120, label_visibility="collapsed")
                 st.session_state.tor_sections[i] = updated_val
-                
-                if st.button(f"✨ ให้ AI เขียนข้อ {i} ใหม่เฉพาะข้อ", key=f"regen_{i}"):
+                if st.button(f"🔄 รีเจนเฉพาะข้อ {i}", key=f"regen_{i}"):
                     sub_placeholder = st.empty()
-                    single_prompt = f"จงเขียนทบทวนปรับปรุงเนื้อหาเฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' สำหรับโครงการ '{meta_info['title']}' ให้มีความละเอียดและสอดคล้องกับระเบียบราชการยิ่งขึ้น"
+                    single_prompt = f"จงเขียนทบทวนปรับปรุงเนื้อหาเฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' สำหรับโครงการ '{meta_info['title']}' ให้มีความรายละเอียดชัดเจนตามระบบราชการ"
                     generate_section_stream(single_prompt, i, sub_placeholder)
                     st.rerun()
 
 
-# ── แท็บที่ 2: PDF ANALYZER (วิเคราะห์ใบเสนอราคา/สเปคกลาง พร้อมระบบ Interactive Censor) ──
+# ── แท็บที่ 2: PDF ANALYZER (ดึงไฟล์ -> ลบสิ่งซ้ำซ้อนด้วย Regex หลังบ้าน -> แก้ไขมือในทีเดียว) ──
 with tab_pdf_analyze:
-    st.subheader("📂 อัปโหลดเอกสารสเปคเพื่อวิเคราะห์ร่างสเปคกลาง และกรองข้อมูลความลับ")
+    st.write("")
     
     job_description_pdf = st.text_area(
-        "ระบุลักษณะงานหรือวัตถุประสงค์ที่ต้องการนำไปใช้เพื่อตรวจเทียบ:",
-        placeholder="เช่น ต้องการระบบคอมพิวเตอร์สำหรับการเรียนการสอนห้องปฏิบัติการคอมพิวเตอร์ จำนวน 40 เครื่อง...",
+        "🎯 วัตถุประสงค์การใช้งาน/ลักษณะงานที่ต้องการ :",
+        placeholder="เช่น จัดตั้งห้องเรียนคอมพิวเตอร์กราฟิกสามมิติ จำนวน 30 เครื่อง พร้อมระบบเครือข่าย...",
+        height=70,
         key="pdf_job_desc"
     )
 
-    st.divider()
-    st.markdown("### 🔍 ขั้นตอนที่ 1: ตั้งค่าตัวกรองคำเบื้องต้น และอัปโหลดเอกสาร")
+    st.write("")
+    st.markdown("### 📂 อัปโหลดเอกสาร")
     
-    col_c1, col_c2 = st.columns(2)
-    with col_c1:
-        censor_company = st.text_input("ระบุชื่อบริษัทที่ต้องการให้ช่วยสแกนลบออกเป็นพิเศษ (ถ้ามี)", placeholder="เช่น บริษัท เอบีซี จำกัด")
-    with col_c2:
-        censor_phone = st.text_input("ระบุเบอร์โทรศัพท์ที่ต้องการให้ช่วยสแกนลบออกเป็นพิเศษ (ถ้ามี)", placeholder="เช่น 02-123-4567")
-
     uploaded_files = st.file_uploader(
-        "เลือกไฟล์ PDF สเปคจากบริษัทต่างๆ (เลือกพร้อมกันตั้งแต่ 2 ไฟล์ขึ้นไป):", 
+        "เลือกไฟล์ PDF สเปคหรือใบเสนอราคาจากบริษัทต่างๆ (เลือกพร้อมกันคราวละ 2 ไฟล์ขึ้นไป)", 
         type=["pdf"], 
         accept_multiple_files=True,
         key="pdf_uploader"
     )
 
     if uploaded_files:
-        st.info(f"📁 อัปโหลดเอกสารเข้ามาทั้งหมด {len(uploaded_files)} บริษัท")
-        if st.button("🧼 เริ่มกระบวนการดึงข้อความและเซนเซอร์คำอัตโนมัติรอบแรก", type="secondary", use_container_width=True):
-            with st.spinner("กำลังอ่านข้อมูลจากไฟล์ PDF และทำการกรองข้อความความลับ..."):
-                # รีเซ็ตหรือล้างค่าเก่าออกก่อนสแกนชุดใหม่
-                st.session_state.pdf_censored_texts = {}
+        st.write("")
+        if st.button("🔓 ดึงข้อมูลและคลีนสิ่งซ้ำซ้อนอัตโนมัติ", type="secondary", use_container_width=True):
+            with st.spinner("ระบบกำลังอ่านข้อความและใช้ Regex เคลียร์ข้อมูลติดต่อซ้ำๆ ออกให้เบื้องต้น..."):
+                st.session_state.pdf_extracted_texts = {}
                 for file in uploaded_files:
                     raw_text = extract_text_from_pdf(file)
-                    # วิ่งเข้าฟังก์ชัน Regex เปลี่ยนข้อความสุ่มเสี่ยงให้กลายเป็น [HIDDEN]
-                    cleaned_text = auto_censor_text(raw_text, custom_company=censor_company, custom_phone=censor_phone)
-                    st.session_state.pdf_censored_texts[file.name] = cleaned_text
-            st.success("✅ สแกนคำอัตโนมัติรอบแรกเสร็จสิ้น! เชิญตรวจสอบและลบคำเพิ่มในขั้นตอนด้านล่างครับ")
+                    # เรียกใช้ฟังก์ชัน Regex คลีนข้อมูลติดต่อส่วนเกินหลังบ้านทันที
+                    cleaned_text = clean_redundant_info(raw_text)
+                    st.session_state.pdf_extracted_texts[file.name] = cleaned_text
+            st.success("ดึงและจัดระเบียบข้อมูลสำเร็จ! ตรวจสอบความถูกต้องขั้นสุดท้ายที่กล่องข้อความด้านล่าง")
 
-    # 🟢 ขั้นตอนย่อยเพิ่มเข้ามา: แสดงผลให้เห็นว่าลบหมดหรือยัง และยอมให้ผู้ใช้ลบ/แก้ไขเพิ่มได้เอง
-    if st.session_state.pdf_censored_texts:
-        st.divider()
-        st.markdown("### 📝 ขั้นตอนที่ 2: หน้าต่างตรวจสอบเนื้อหาเอกสาร (ผู้ใช้สามารถแก้ไขหรือลบคำเพิ่มได้เอง)")
-        st.warning("⚠️ โปรดกวาดสายตาตรวจทาน หากยังพบชื่อบริษัท แบรนด์สินค้า หรือความลับที่ระบบหลุดลอกออกไม่หมด สามารถลบหรือพิมพ์แก้ไขในกล่องด้านล่างนี้ได้เลยทันที!")
-
-        for file_name, text_content in list(st.session_state.pdf_censored_texts.items()):
-            with st.expander(f"📄 เนื้อหาที่ระบบกรองได้จากไฟล์: {file_name}", expanded=True):
-                # ใช้ text_area โชว์ข้อความที่สแกนได้ และผูก binding คืนค่ากลับเซสชันเมื่อมีการแก้ไขมือ
-                user_updated_text = st.text_area(
-                    label="กล่องแก้ไขข้อความ (ข้อมูลในนี้จะถูกนำไปส่งให้ AI ประมวลผลต่อ)",
-                    value=text_content,
-                    height=250,
-                    key=f"user_edit_{file_name}"
-                )
-                # อัปเดตข้อความที่ผู้ใช้ลบหรือพิมพ์แก้ไขด้วยตนเองเก็บลง State
-                st.session_state.pdf_censored_texts[file_name] = user_updated_text
-
-        st.divider()
-        st.markdown("### 🚀 ขั้นตอนที่ 3: ส่งข้อมูลที่ผ่านการตรวจสอบให้ AI สรุป")
+    # 📝 ตรวจทานและแก้ไขทีเดียวจบในหน้านี้ (Human-in-the-loop)
+    if st.session_state.pdf_extracted_texts:
+        st.write("")
+        st.markdown("### 📝 ตรวจทานและแก้ไขเนื้อหาเอกสารด้วยตัวเอง")
+        st.info("💡 ข้อความด้านล่างผ่านการใช้ Regex ซ่อนเบอร์โทร/อีเมลที่ซ้ำซ้อนแล้ว ท่านสามารถพิมพ์ลบชื่อแบรนด์หรือสเปคส่วนเกินออกเพิ่มได้ด้วยตัวเองทันทีก่อนส่งให้ AI ประมวลผล")
         
-        if st.button("🔥 เริ่มวิเคราะห์และสรุปสเปคกลางจากข้อความด้านบน", type="primary", use_container_width=True):
+        for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
+            with st.expander(f"📄 ตรวจสอบเนื้อหา: {file_name}", expanded=True):
+                user_updated_text = st.text_area(
+                    "แก้ไขเนื้อหาข้อความเพื่อเตรียมส่งให้ AI",
+                    value=text_content,
+                    height=200,
+                    key=f"user_edit_{file_name}",
+                    label_visibility="collapsed"
+                )
+                st.session_state.pdf_extracted_texts[file_name] = user_updated_text
+
+        st.write("")
+        st.markdown("### 🚀 ประมวลผลสร้างร่างสเปคกลาง")
+        if st.button("📊 สั่ง AI สรุปเปรียบเทียบและทำร่างสเปคกลาง (ไม่ล็อกสเปค)", type="primary", use_container_width=True):
             if not client:
-                st.error("🚨 ไม่สามารถเริ่มทำงานได้ เนื่องจากระบบยังไม่ได้เชื่อมต่อกับ Gemini API Key")
+                st.error("🚨 ไม่พบคีย์เชื่อมต่อวิเคราะห์ระบบ")
             elif not job_description_pdf:
-                st.warning("⚠️ กรุณากรอกรายละเอียดลักษณะงานที่ต้องการนำไปใช้ก่อนครับ")
-            elif len(st.session_state.pdf_censored_texts) < 2:
-                st.warning("⚠️ กรุณาอัปโหลดเอกสารอย่างน้อย 2 บริษัทขึ้นไปเพื่อให้ AI ตรวจเปรียบเทียบได้")
+                st.warning("⚠️ โปรดใส่ลักษณะงานหรือวัตถุประสงค์ก่อน")
             else:
-                with st.spinner(f"Gemini กำลังนำข้อความที่คุณตรวจสอบแล้วไปประมวลผลสรุปสเปคกลาง..."):
+                with st.spinner("Gemini กำลังวิเคราะห์จุดร่วมทางเทคนิคเพื่อสร้างสเปคกลางที่โปร่งใส..."):
                     try:
-                        # ดึงข้อความเวอร์ชันล่าสุดที่ "มนุษย์กดแก้ไข/ลบคำด้วยมือแล้ว" มารวมกันส่งให้ AI
                         all_companies_data_prompt = ""
-                        for idx, (f_name, final_text) in enumerate(st.session_state.pdf_censored_texts.items()):
-                            all_companies_data_prompt += f"\n--- ข้อมูลสเปคเอกสารชุดที่ {idx+1} ---\n"
-                            all_companies_data_prompt += final_text[:5000] + "\n"
+                        for idx, (f_name, final_text) in enumerate(st.session_state.pdf_extracted_texts.items()):
+                            all_companies_data_prompt += f"\n--- Spec Document {idx+1} ---\n{final_text[:4000]}\n"
                         
                         prompt = f"""
                         คุณคือผู้เชี่ยวชาญด้านการตรวจรับและจัดทำคุณลักษณะเฉพาะ (TOR Specialist) 
-                        งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(st.session_state.pdf_censored_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ **"ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด"** แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
+                        งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(st.session_state.pdf_extracted_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ "ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด" แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
 
                         [ลักษณะงานที่ผู้ใช้ต้องการ]:
                         {job_description_pdf}
 
-                        [ข้อมูลเอกสารสเปคของทุกบริษัท (ที่ผ่านการเซนเซอร์ข้อความความลับเรียบร้อยแล้ว)]:
+                        [ข้อมูลเนื้อหาเอกสารสเปคที่ผู้ใช้ส่งมาและตรวจทานแล้ว]:
                         {all_companies_data_prompt}
 
                         กรุณาตอบกลับเป็นภาษาไทย โดยใช้รูปแบบ Markdown ที่กระชับ เป็นข้อๆ และเข้าใจง่ายที่สุด ดังนี้:
-
-                        1. ## 📊 ตารางสรุปเปรียบเทียบสเปค (ทำเป็นตารางสั้นๆ สรุปเฉพาะจุดสำคัญ)
-                        
-                        2. ## 📋 ร่างสเปคกลาง (ข้อกำหนดขั้นต่ำที่โปร่งใสและแข่งขันได้จริง)
-                        *สั่งห้ามระบุคำว่า Intel, AMD, NVIDIA, GeForce โดยเด็ดขาด* ให้เปลี่ยนคำสั่งดังนี้:
-                        - CPU: ให้ใช้คำว่า "หน่วยประมวลผลกลาง ไม่น้อยกว่า X คอร์ X เธรด และมีความเร็วสัญญาณนาฬิกาขั้นต่ำ..."
-                        - GPU: ให้ใช้คำว่า "หน่วยประมวลผลกราฟิกชนิดแยก (Dedicated GPU) มีหน่วยความจำไม่น้อยกว่า X GB"
-                        - ส่วนอื่นๆ ให้ระบุเป็นค่าขั้นต่ำที่อย่างน้อย 3 รายผ่านเกณฑ์
-
-                        3. ## 💡 ความเห็นกรรมการ (สรุปสั้น 3 บรรทัด)
-                        - สเปคกลางนี้พอมั้ยกับงาน?
-                        - จุดที่ควรระวังหรือควร upgrade เพิ่มเพื่อความคุ้มค่า (สรุปเป็นข้อสั้นๆ ห้ามยาว)
+                        1. ## 📊 ตารางสรุปเปรียบเทียบสเปค (สรุปเฉพาะจุดสำคัญ)
+                        2. ## 📋 ร่างสเปคกลาง (ข้อกำหนดขั้นต่ำที่โปร่งใสและแข่งขันได้จริง) *สั่งห้ามระบุคำว่า Intel, AMD, NVIDIA, GeForce โดยเด็ดขาด* ให้เปลี่ยนเป็นคำจำกัดความเชิงเทคนิคเช่น หน่วยประมวลผลกลาง หรือหน่วยประมวลผลกราฟิกชนิดแยก
+                        3. ## 💡 ความเห็นกรรมการ (สรุปสั้น 3 บรรทัดจบ)
                         """
                         
                         response = client.models.generate_content(
                             model=MODEL_NAME,
                             contents=prompt,
                             config=types.GenerateContentConfig(
-                                system_instruction="คุณคือผู้เชี่ยวชาญด้านกฎหมายพัสดุและขอบเขตสเปค TOR เครื่องคอมพิวเตอร์และอุปกรณ์เทคโนโลยีสารสนเทศ",
+                                system_instruction="คุณคือผู้เชี่ยวชาญด้านกฎหมายพัสดุและขอบเขตสเปค TOR อุปกรณ์เทคโนโลยี",
                                 temperature=0.4
                             )
                         )
-                        
-                        st.success("✨ Gemini วิเคราะห์และจัดทำร่างสเปคกลางสำเร็จเรียบร้อย!")
+                        st.write("")
+                        st.success("สรุปผลสำเร็จ!")
                         st.markdown(response.text)
-                        
                     except Exception as e:
-                        st.error(f"เกิดข้อผิดพลาดในการประมวลผลสเปคกลาง: {str(e)}")
+                        st.error(f"เกิดข้อผิดพลาด: {str(e)}")
 
 
-# ── แท็บที่ 3: SETUP & INFO (ตั้งค่า API และตารางอ้างอิง) ─────────────────
+# ── แท็บที่ 3: INFO ONLY (คำแนะนำและตารางอ้างอิง ว.159) ──────────────────────
 with tab_setup_info:
-    col_setup, col_info = st.columns([1, 1])
+    st.write("")
+    st.markdown("### 📋 โครงสร้างแนวทาง 10 ข้อหลักตาม ว.159")
+    st.caption("อ้างอิงโครงสร้างมาตรฐานหนังสือเวียน กค (กวจ) 0405.4/ว 159 ของกรมบัญชีกลาง")
     
-    with col_setup:
-        st.subheader("⚙️ การตั้งค่าการเชื่อมต่อ API ของ Gemini")
-        st.markdown(
-            """
-            * **กรณีติดตั้งขึ้น Streamlit Cloud (แนะนำ):** นำ API Key ไปฝากไว้ที่เมนู **Advanced Settings > Secrets** บน Dashboard โดยใช้ชื่อตัวแปร:
-            ```toml
-            GEMINI_API_KEY = "AIzaSyxxxxxxxxxxxx"
-            ```
-            * **กรณีทดสอบชั่วคราว:** กรอกคีย์ของคุณลงในช่องด้านล่างเพื่อใช้ในเซสชันนี้ได้เลย:
-            """
-        )
-        user_key = st.text_input("ระบุ Gemini API Key (AIzaSy...) ", type="password", value=os.environ.get("GEMINI_API_KEY") if os.environ.get("GEMINI_API_KEY") else "", key="setup_key_input")
-        if st.button("💾 บันทึก API Key เฉพาะเซสชันนี้", key="btn_save_key"):
-            os.environ["GEMINI_API_KEY"] = user_key
-            st.success("บันทึกคีย์เรียบร้อย! ระบบกำลังรีเฟรช")
-            time.sleep(1)
-            st.rerun()
-
-    with col_info:
-        st.subheader("📋 ตารางข้อมูล ว.159")
-        st.caption("อ้างอิงโครงสร้าง ว.159 ทั้ง 10 ข้อหลัก")
-        info_data = [
-            {"หัวข้อ ว.159": "ข้อ 1", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[1], "คำอธิบายเบื้องต้น": "ความเป็นมาของโครงการ"},
-            {"หัวข้อ ว.159": "ข้อ 2", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[2], "คำอธิบายเบื้องต้น": "วัตถุประสงค์ในการจัดซื้อจัดจ้าง"},
-            {"Workflow": "ข้อ 3", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[3], "คำอธิบายเบื้องต้น": "คุณสมบัติที่จำเป็นของผู้ยื่นข้อเสนอ"},
-            {"หัวข้อ ว.159": "ข้อ 4", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[4], "คำอธิบายเบื้องต้น": "รายละเอียดคุณลักษณะเฉพาะพัสดุ"},
-            {"หัวข้อ ว.159": "ข้อ 5", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[5], "คำอธิบายเบื้องต้น": "กำหนดระยะเวลาในการดำเนินโครงการ"},
-            {"หัวข้อ ว.159": "ข้อ 6", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[6], "คำอธิบายเบื้องต้น": "เงื่อนไขการส่งมอบงานและการตรวจรับ"},
-            {"หัวข้อ ว.159": "ข้อ 7", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[7], "คำอธิบายเบื้องต้น": "หลักเกณฑ์ในการพิจารณาคัดเลือก"},
-            {"หัวข้อ ว.159": "ข้อ 8", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[8], "คำอธิบายเบื้องต้น": "เงื่อนไขอัตราค่าปรับกรณีล่าช้า"},
-            {"หัวข้อ ว.159": "ข้อ 9", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[9], "คำอธิบายเบื้องต้น": "เงื่อนไขการรับประกันความชำรุดบกพร่อง"},
-            {"หัวข้อ ว.159": "ข้อ 10", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[10], "คำอธิบายเบื้องต้น": "ข้อสงวนสิทธิ์ในการยื่นข้อเสนอและอื่นๆ"}
-        ]
-        st.table(info_data)
+    info_data = [
+        {"ข้อที่": f"ข้อ {i}", "หัวข้อโครงร่างมาตรฐาน": TOR_TITLES[i]} for i in range(1, 11)
+    ]
+    st.table(info_data)
