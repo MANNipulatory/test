@@ -24,7 +24,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# ✅ แก้ไขเป็น unsafe_allow_html=True เรียบร้อยครับ
 st.markdown("""
     <style>
         .reportview-container .main .block-container {
@@ -108,12 +107,30 @@ def extract_text_from_pdf(uploaded_file):
         return ""
 
 def clean_redundant_info(text):
-    """ใช้ Regex กรองเอาข้อมูลแพทเทิร์นซ้ำซ้อน เช่น เบอร์โทร อีเมล หรือ URL ออกอัตโนมัติหลังบ้าน"""
+    """ใช้ Regex กรองข้อมูลติดต่อ และเซนเซอร์ชื่อบริษัท/ห้างหุ้นส่วน/แบรนด์สินค้าอัตโนมัติ"""
     if not text:
         return ""
+    
+    # 1. กรองเบอร์โทรศัพท์รูปแบบต่างๆ ออก
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
+    
+    # 2. กรองอีเมลออก
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
+    
+    # 3. กรองลิงก์/URL ออก
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
+    
+    # 4. 🔥 เพิ่มการเซนเซอร์ชื่อบริษัท/นิติบุคคล (ภาษาไทย)
+    # จับกลุ่ม: บริษัท...จำกัด (มหาชน), บริษัท...จำกัด, ห้างหุ้นส่วนจำกัด..., หจก...., บมจ....
+    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(หจก\s*\.\s*[^\s\n]+)|(บมจ\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    
+    # 5. 🔥 เพิ่มการเซนเซอร์ชื่อบริษัท (ภาษาอังกฤษ)
+    # จับกลุ่ม: ตัวอักษรตามด้วย Co., Ltd. / Company Limited / Inc. / Corp.
+    text = re.sub(r'\b[A-Za-z0-9\s\.,&-]+(?:Co\s*\.\s*,\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.|Corp\s*\.)', "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
+    
+    # 6. เซนเซอร์แบรนด์ไอทีหลักๆ ที่ชอบติดมาในสเปค (เพื่อป้องกันการล็อกสเปคเบื้องต้น)
+    text = re.sub(r'\b(Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei)\b', "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
+    
     return text
 
 def create_docx(title, agency, project_type, budget, criteria, sections):
@@ -206,7 +223,6 @@ with header_col:
     st.title("🛡️ AI Procurement Space")
     st.caption("ระบบบริหารจัดการเอกสาร TOR (ว.159) และวิเคราะห์สเปคกลางอัจฉริยะ")
 with status_col:
-    # ✅ แก้ไขจุดที่ 2 ตรงปุ่มสถานะ Connected เป็น unsafe_allow_html=True
     if client:
         st.markdown("<div style='text-align:right; margin-top:15px;'><span style='background-color:#DCFCE7; color:#15803D; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:500;'>🟢 Connected</span></div>", unsafe_allow_html=True)
     else:
@@ -318,7 +334,7 @@ with tab_pdf_analyze:
     if uploaded_files:
         st.write("")
         if st.button("🔓 ดึงข้อมูลและคลีนสิ่งซ้ำซ้อนอัตโนมัติ", type="secondary", use_container_width=True):
-            with st.spinner("ระบบกำลังอ่านข้อความและใช้ Regex เคลียร์ข้อมูลติดต่อซ้ำๆ ออกให้เบื้องต้น..."):
+            with st.spinner("ระบบกำลังอ่านข้อความและใช้ Regex เคลียร์ข้อมูลติดต่อและชื่อบริษัทออกเบื้องต้น..."):
                 st.session_state.pdf_extracted_texts = {}
                 for file in uploaded_files:
                     raw_text = extract_text_from_pdf(file)
@@ -329,7 +345,7 @@ with tab_pdf_analyze:
     if st.session_state.pdf_extracted_texts:
         st.write("")
         st.markdown("### 📝 ตรวจทานและแก้ไขเนื้อหาเอกสารด้วยตัวเอง")
-        st.info("💡 ข้อความด้านล่างผ่านการใช้ Regex ซ่อนเบอร์โทร/อีเมลที่ซ้ำซ้อนแล้ว ท่านสามารถพิมพ์ลบชื่อแบรนด์หรือสเปคส่วนเกินออกเพิ่มได้ด้วยตัวเองทันทีก่อนส่งให้ AI ประมวลผล")
+        st.info("💡 ข้อความด้านล่างผ่านการใช้ Regex ซ่อนชื่อบริษัท/เบอร์โทร/อีเมลแล้ว ท่านสามารถพิมพ์แก้ไขสเปคส่วนเกินออกเพิ่มได้ด้วยตัวเองทันทีก่อนส่งให้ AI ประมวลผล")
         
         for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
             with st.expander(f"📄 ตรวจสอบเนื้อหา: {file_name}", expanded=True):
@@ -358,7 +374,7 @@ with tab_pdf_analyze:
                         
                         prompt = f"""
                         คุณคือผู้เชี่ยวชาญด้านการตรวจรับและจัดทำคุณลักษณะเฉพาะ (TOR Specialist) 
-                        งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(st.session_state.pdf_extracted_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ "ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด" แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
+                        งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(st.session_state.pdf_extracted_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ "ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด" และห้ามระบุชื่อบริษัทใดๆ ทั้งสิ้น แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
 
                         [ลักษณะงานที่ผู้ใช้ต้องการ]:
                         {job_description_pdf}
