@@ -18,75 +18,96 @@ else:
 MODEL_NAME = "gemini-2.5-flash"
 
 st.set_page_config(
-    page_title="🛡️ AI Procurement TOR Space",
+    page_title="AI Procurement TOR Space",
     page_icon="🛡️",
     layout="wide"
 )
 
-# 🔥 [DESIGN UPDATE] ปรับแต่ง CSS ใหม่หมดจด: สวยเฉียบ กะทัดรัด รองรับ Dark/Light Theme สมบูรณ์แบบ
+# 🔥 [SUPER MINIMALIST UI UPDATE] รื้อดีไซน์ทิ้งทั้งหมด ลบกรอบเทอะทะ ใช้เส้นสายบางๆ รองรับ Dark/Light 100%
 st.markdown("""
     <style>
-        /* จำกัดความกว้างเนื้อหาหลักไม่ให้แผ่กระจายเต็มจอเกินไปจนเทอะทะ */
+        /* บีบหน้าจอให้โฟกัสตรงกลางพอดี ไม่แผ่กระจาย */
         .block-container {
-            max-width: 1100px !important;
-            padding-top: 1.5rem !important;
-            padding-bottom: 3rem !important;
+            max-width: 960px !important;
+            padding-top: 2rem !important;
+            padding-bottom: 4rem !important;
         }
         
-        /* ปรับสไตล์หัวข้อ */
+        /* Typography คลีนๆ */
         h1 {
-            font-size: 1.8rem !important;
+            font-size: 1.6rem !important;
             font-weight: 700 !important;
-            margin-bottom: 0.1rem !important;
+            letter-spacing: -0.5px;
+            margin-bottom: 0.2rem !important;
         }
         h2 {
-            font-size: 1.25rem !important;
+            font-size: 1.15rem !important;
             font-weight: 600 !important;
-            margin-top: 1.5rem !important;
-            margin-bottom: 0.8rem !important;
-            padding-bottom: 4px;
-            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+            margin-top: 2rem !important;
+            margin-bottom: 1rem !important;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2) !important;
+            padding-bottom: 6px !important;
         }
         
-        /* ปรับดีไซน์การจัดกลุ่ม Layout (รองรับ Dark Theme อัตโนมัติด้วยการใช้สีโปร่งแสง) */
-        .step-card {
-            background-color: rgba(128, 128, 128, 0.04);
-            border: 1px solid rgba(128, 128, 128, 0.15);
-            padding: 1.1rem;
-            border-radius: 8px;
-            margin-bottom: 1.2rem;
+        /* ปลิดชีพกรอบหนาและพื้นหลังทึบของระบบออกให้หมดกึ่งโปร่งแสง */
+        div[data-testid="stForm"], .step-card, div.stAlert {
+            background-color: transparent !important;
+            border: none !important;
+            padding: 0px !important;
         }
         
-        /* ปรับแต่งความกะทัดรัดของกล่องข้อความ Textarea */
+        /* เปลี่ยนกล่อง Textarea ให้เป็นสไตล์หรู เหลือแค่เส้นใต้บางๆ (Underline Style) */
         .stTextArea textarea {
-            border-radius: 6px !important;
-            border: 1px solid rgba(128, 128, 128, 0.25) !important;
-            padding: 8px 12px !important;
+            background-color: transparent !important;
+            border-top: none !important;
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.3) !important;
+            border-radius: 0px !important;
+            padding: 8px 0px !important;
             font-size: 0.95rem !important;
+            transition: border-color 0.2s ease;
+        }
+        .stTextArea textarea:focus {
+            border-bottom: 1px solid #3B82F6 !important;
+            box-shadow: none !important;
         }
         
-        /* ปรับปรุงหน้าตาปุ่มกดให้ดูโมเดิร์น ไม่หนา */
-        .stButton button {
-            border-radius: 6px !important;
-            padding: 0.35rem 1rem !important;
-            font-weight: 500 !important;
-            font-size: 0.9rem !important;
-        }
-        
-        /* ลูกเล่นกรอบ Expander (ข้อ 1-10) ให้ดูเป็น Card มินิมอล */
+        /* แปลงโฉม Expander (ข้อ 1-10) จากกล่องทึบดาดดื่น ให้กลายเป็นหัวข้อกางได้สไตล์มินิมอล */
         .streamlit-expanderHeader {
-            border: 1px solid rgba(128, 128, 128, 0.12) !important;
-            border-radius: 6px !important;
-            padding: 8px 12px !important;
+            background-color: transparent !important;
+            border: none !important;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.15) !important;
+            border-radius: 0px !important;
+            padding: 10px 0px !important;
             font-size: 0.95rem !important;
+            font-weight: 500 !important;
         }
         .streamlit-expanderContent {
-            border-left: 1px solid rgba(128, 128, 128, 0.12) !important;
-            border-right: 1px solid rgba(128, 128, 128, 0.12) !important;
-            border-bottom: 1px solid rgba(128, 128, 128, 0.12) !important;
-            border-bottom-left-radius: 6px;
-            border-bottom-right-radius: 6px;
-            padding: 10px !important;
+            background-color: transparent !important;
+            border: none !important;
+            padding: 12px 0px 4px 0px !important;
+        }
+        
+        /* แต่งปุ่มกดให้เล็ก คลีน โค้งมนพองาม ไม่หนาเทอะทะ */
+        .stButton button {
+            background-color: transparent !important;
+            border: 1px solid rgba(128, 128, 128, 0.4) !important;
+            border-radius: 4px !important;
+            padding: 0.25rem 0.8rem !important;
+            font-size: 0.85rem !important;
+            transition: all 0.2s ease;
+        }
+        .stButton button:hover {
+            border-color: #3B82F6 !important;
+            color: #3B82F6 !important;
+        }
+        /* ปุ่มสไตล์ Primary สีสันนุ่มนวลขึ้น */
+        .stButton div button[data-testid="baseButton-primary"] {
+            border: 1px solid #3B82F6 !important;
+            color: #3B82F6 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -141,7 +162,7 @@ def clean_redundant_info(text):
     text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
-    text = re.sub(r'(บริษัท\s+[^\s\n]+ coars\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
     text = re.sub(r'บริษัท\s+([A-Za-z0-9เ-แ🏡ก-ฮ\s\.\-\(\)]+?)(?=\s*(?:เสนอ|ราคา|จำกัด|ติดต่อ|\n|$))', "[COMPANY_HIDDEN]", text)
     en_company_pattern = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|Corporation|LLC|Pty\s+Ltd|Group)\b'
     text = re.sub(en_company_pattern, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
@@ -223,56 +244,51 @@ def create_docx(title, agency, project_type, budget, criteria, sections):
 
 # ── 4. UI RENDER (SINGLE PAGE WORKFLOW) ──────────────────────────
 st.title("🛡️ AI Procurement TOR Workspace")
-st.caption("ระบบรวบรวม วิเคราะห์สเปคกลาง และร่างเอกสาร TOR (ว.159) ดีไซน์กะทัดรัดระดับมืออาชีพ")
+st.caption("ระบบรวบรวม วิเคราะห์สเปคกลาง และร่างเอกสาร TOR (ว.159)")
 
 # 📊 ส่วนที่ 1: ตั้งค่าข้อมูลโครงการหลัก
 st.markdown("## 1. ข้อมูลโครงการทั่วไป")
-st.markdown("<div class='step-card'>", unsafe_allow_html=True)
 col_form1, col_form2 = st.columns(2)
 with col_form1:
-    p_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", placeholder="เช่น จัดซื้อชุดคอมพิวเตอร์ประมวลผลสูง 30 เครื่อง")
-    p_agency = st.text_input("หน่วยงาน / ส่วนราชการ", placeholder="เช่น กองการพัสดุ")
+    p_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", placeholder="ระบุชื่อโครงการ...")
+    p_agency = st.text_input("หน่วยงาน / ส่วนราชการ", placeholder="ระบุหน่วยงานผู้รับผิดชอบ...")
 with col_form2:
     p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=5000, value=0)
     p_criteria = st.radio("หลักเกณฑ์การคัดเลือก", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True)
-st.markdown("</div>", unsafe_allow_html=True)
 
 # 🔍 ส่วนที่ 2: ผนึกกำลังวิเคราะห์และคลีนไฟล์สเปค (สำหรับลงข้อ 4 อัตโนมัติ)
-st.markdown("## 2. ระบบวิเคราะห์เอกสารสเปคกลางเพื่อสร้าง TOR ข้อ 4")
-st.markdown("<div class='step-card'>", unsafe_allow_html=True)
-job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้จริง (ช่วยนำทาง AI):", placeholder="เช่น ต้องการสร้างห้องปฏิบัติการคอมพิวเตอร์ที่เน้นการประมวลผลโมเดล 3D และงานกราฟิกสเปคสูง...", height=65)
+st.markdown("## 2. วิเคราะห์เอกสารสเปคกลางเพื่อสร้าง TOR ข้อ 4")
+job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้จริง:", placeholder="ระบุเป้าหมายการใช้งานจริงเพื่อนำทาง AI...", height=65)
 
-col_file1, col_file2 = st.columns([2, 1])
+col_file1, col_file2 = st.columns([3, 1])
 with col_file1:
-    uploaded_files = st.file_uploader("เลือกไฟล์ PDF สเปคหรือใบเสนอราคาอ้างอิง", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
+    uploaded_files = st.file_uploader("อัปโหลดไฟล์ PDF อ้างอิงสเปค", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
 with col_file2:
-    process_pdf_click = st.button("🔓 สกัดสเปค & ซ่อนความลับ", use_container_width=True)
+    process_pdf_click = st.button("🔓 สกัดสเปค & คลีนแบรนด์", use_container_width=True)
 
 if uploaded_files and process_pdf_click:
-    with st.spinner("กำลังคลีนข้อมูลนิติบุคคล..."):
+    with st.spinner("กำลังคลีนข้อมูล..."):
         st.session_state.pdf_extracted_texts = {}
         for file in uploaded_files:
             raw_text = extract_text_from_pdf(file)
             cleaned_text = clean_redundant_info(raw_text)
             st.session_state.pdf_extracted_texts[file.name] = summarize_single_pdf_spec(cleaned_text)
-    st.success("สกัดสเปคและแปลงข้อมูลลับเรียบร้อยแล้ว!")
 
 if st.session_state.pdf_extracted_texts:
-    st.markdown("<br><b>📝 กล่องตรวจสอบการเซนเซอร์ชื่อบริษัท:</b>", unsafe_allow_html=True)
     for file_name, text_content in list(st.session_state.pdf_extracted_texts.items()):
-        with st.expander(f"🔎 ตรวจสอบไฟล์ย่อย: {file_name}", expanded=False): # ปรับเป็นยุบไว้เพื่อประหยัดพื้นที่หน้าจอ ไม่ดูเทอะทะ
-            user_updated_text = st.text_area("แก้ไขสเปคย่อยท่อนนี้", value=text_content, height=120, key=f"edit_pdf_{file_name}", label_visibility="collapsed")
+        with st.expander(f"🔎 สเปคอ้างอิงที่คลีนแล้ว: {file_name}", expanded=False):
+            user_updated_text = st.text_area("แก้ไขเนื้อหาเพิ่มเติม", value=text_content, height=120, key=f"edit_pdf_{file_name}", label_visibility="collapsed")
             st.session_state.pdf_extracted_texts[file_name] = user_updated_text
     
-    check_company = st.checkbox("✅ ตรวจสอบเรียบร้อย: ข้าพเจ้ายืนยันว่าลบรายชื่อบริษัทและตราสินค้า (ล็อกสเปค) เกลี้ยงแล้ว")
+    check_company = st.checkbox("ข้าพเจ้ายืนยันว่าตรวจสอบและตัดข้อมูลการล็อกสเปคเรียบร้อยแล้ว")
     
-    if st.button("📊 บันทึกคุณลักษณะเฉพาะ (สเปคกลาง) เข้าสู่ข้อ 4 TOR", type="primary"):
+    if st.button("📊 บันทึกสเปคกลางเข้าสู่ข้อ 4 TOR", type="primary"):
         if not job_description_pdf:
             st.warning("⚠️ โปรดระบุวัตถุประสงค์ลักษณะงานก่อน")
         elif not check_company:
-            st.error("⚠️ โปรดกดยืนยันการตรวจสอบรายชื่อบริษัทด้านบนก่อนดำเนินงาน")
+            st.error("⚠️ โปรดกดยืนยันการตรวจสอบความโปร่งก่อน")
         else:
-            with st.spinner("AI กำลังสร้างข้อกำหนดสเปคกลางราชการ (ข้อ 4)..."):
+            with st.spinner("AI กำลังประมวลผลข้อ 4..."):
                 try:
                     all_data = ""
                     for idx, (f_name, f_text) in enumerate(st.session_state.pdf_extracted_texts.items()):
@@ -282,41 +298,39 @@ if st.session_state.pdf_extracted_texts:
                     วิเคราะห์ข้อมูลและร่างสเปคกลางเพื่อนำไปใส่ในเอกสาร TOR ข้อ 4 (แบบรูปรายการ หรือคุณลักษณะเฉพาะของพัสดุ)
                     วัตถุประสงค์โครงการ: {job_description_pdf}
                     ข้อมูลอ้างอิงจากผู้เสนอราคา: {all_data}
-                    
-                    เขียนสเปคและข้อย่อยละเอียดและครบครันที่สุด แตกหัวข้อย่อยชัดเจน ขึ้นต้นด้วย 4.1, 4.2 ตามระเบียบราชการไทย ห้ามมีชื่อยี่ห้อและชื่อบริษัทเด็ดขาด
+                    เขียนข้อย่อยละเอียดและครบครันที่สุด ขึ้นต้นด้วย 4.1, 4.2 ตามระเบียบราชการไทย ห้ามมีชื่อยี่ห้อและบริษัทเด็ดขาด
                     """
                     response = client.models.generate_content(
                         model=MODEL_NAME, contents=prompt,
                         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.3, max_output_tokens=3500)
                     )
                     st.session_state.ai_drafted_spec_v4 = response.text
-                    st.session_state.tor_sections[4] = response.text  # ซิงค์เข้า State ข้อ 4 ทันที
-                    st.success("สร้างร่างสเปคกลางเรียบร้อย! ข้อมูลถูกส่งเข้าสู่แบบฟอร์มร่างข้อ 4 ด้านล่างแล้วครับ")
+                    st.session_state.tor_sections[4] = response.text
+                    st.success("ซิงค์สเปคกลางเข้าสู่ร่างข้อ 4 เรียบร้อยด้านล่างแล้ว!")
                 except Exception as e:
                     st.error(f"เกิดข้อผิดพลาด: {e}")
-st.markdown("</div>", unsafe_allow_html=True)
 
 # 📝 ส่วนที่ 3: แบบฟอร์มตรวจทานและร่างเอกสาร TOR 10 ข้อ
-st.markdown("## 3. ตรวจทานและจัดการร่างขอบเขตงาน TOR ทั้ง 10 ข้อ")
+st.markdown("## 3. จัดการขอบเขตงาน TOR 10 ข้อหลัก")
 if p_name:
-    st.caption(f"📌 กำลังทำงานในโครงการ: **{p_name}** | งบประมาณ: **{p_budget:,} บาท**")
+    st.caption(f"📍 โครงการปัจจุบัน: **{p_name}** | งบประมาณ: **{p_budget:,} บาท**")
 
-# วนลูปแสดงกล่องข้อความ 10 ข้อหลักในรูปแบบ Card ยุบขยายได้ มินิมอล ไม่กินพื้นที่หน้าจอ
+# ลูปแสดงแบบมินิมอล ไร้กรอบทึบ ไร้พื้นหลังสีเทาหนาเตอะ
 for i in range(1, 11):
-    with st.expander(f"🔹 ข้อ {i}: {TOR_TITLES[i]}", expanded=(i==4)):
+    with st.expander(f"📌 ข้อ {i}: {TOR_TITLES[i]}", expanded=(i==4)):
         current_content = st.session_state.tor_sections.get(i, "")
         
         if i == 4 and st.session_state.ai_drafted_spec_v4:
-            st.markdown("<span style='color:#10B981; font-size:12px; font-weight:500;'>🟢 ข้อมูลชุดนี้ได้รับการซิงค์มาจากระบบวิเคราะห์สเปคกลางด้านบนแล้ว</span>", unsafe_allow_html=True)
+            st.markdown("<small style='color:#10B981;'>ซิงค์ข้อมูลสเปคเทคนิคกลางแล้ว</small>", unsafe_allow_html=True)
             
         updated_content = st.text_area(f"เนื้อหาข้อ {i}", value=current_content, height=140, key=f"main_edit_sec_{i}", label_visibility="collapsed")
         st.session_state.tor_sections[i] = updated_content
         
-        col_btn1, col_btn2 = st.columns([4, 1])
-        with col_btn2:
-            if st.button(f"🔄 รีเจนเฉพาะข้อ {i}", key=f"main_regen_btn_{i}", use_container_width=True):
+        col_space, col_action = st.columns([5, 1])
+        with col_action:
+            if st.button(f"🔄 รีเจนข้อ {i}", key=f"main_regen_btn_{i}", use_container_width=True):
                 if not p_name:
-                    st.error("กรุณาระบุชื่อโครงการก่อน")
+                    st.error("กรุณาระบุชื่อโครงการ")
                 else:
                     box_placeholder = st.empty()
                     spec_prompt = f"จงเขียนทบทวนร่างข้อกำหนดขอบเขตงาน TOR โครงการ '{p_name}' เฉพาะในส่วนของ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ให้ออกมาเป็นข้อๆ ภาษาราชการอย่างละเอียด ถี่ถ้วน เต็มรูปแบบ วงเงินงบประมาณคือ {p_budget} บาท"
@@ -324,36 +338,33 @@ for i in range(1, 11):
                     st.rerun()
 
 st.write("")
-# ปุ่มสั่งการยิงเจนยาวพร้อมกัน 10 ข้อหลัก
-if st.button("✨ สั่ง AI ร่างเอกสารทุกข้อที่เหลือพร้อมกันแบบละเอียดยิบ", type="primary", use_container_width=True):
+if st.button("✨ เริ่มร่างข้อกำหนด TOR ส่วนที่เหลือพร้อมกันทั้งหมด", type="primary", use_container_width=True):
     if not p_name:
-        st.error("⚠️ กรุณาระบุชื่อโครงการที่ด้านบนสุดก่อนเริ่มกระบวนการ")
+        st.error("⚠️ กรุณาระบุชื่อโครงการที่ด้านบนสุด")
     else:
         st.session_state.meta_data = {"title": p_name, "agency": p_agency, "type": "ซื้อ/จ้างทั่วไป", "budget": p_budget, "criteria": p_criteria}
         for i in range(1, 11):
             if i == 4 and st.session_state.tor_sections[4]:
                 continue
-                
-            st.toast(f"กำลังร่างข้อ {i} แบบละเอียด...")
             box_placeholder = st.empty()
             proj_context = f"โครงการ: {p_name}, หน่วยงาน: {p_agency}, งบประมาณ: {p_budget} บาท, เกณฑ์พิจารณา: {p_criteria}"
             specific_prompt = f"""
             จงเขียนเนื้อหาของขอบเขตของงาน (TOR) ตามมาตรฐานราชการไทย ว.159 เฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ของ{proj_context} 
-            ข้อกำหนดกติกา: อธิบายรายละเอียดความรับผิดชอบ เงื่อนไข เงื่อนไขเวลา กฎหมายพัสดุ และระเบียบปฏิบัติที่เกี่ยวข้องให้ถี่ถ้วนและยาวที่สุดเท่าที่จะทำได้ ห้ามสรุปสั้นย่อเด็ดขาด
+            อธิบายรายละเอียดความรับผิดชอบและกฎหมายพัสดุที่เกี่ยวข้องให้ถี่ถ้วนที่สุด ห้ามสรุปสั้นย่อเด็ดขาด
             """
             generate_section_stream(specific_prompt, i, box_placeholder)
         st.balloons()
 
-# ⬇️ ส่วนการ Export ออกเป็นไฟล์ใช้งาน (ปรับปรุงปุ่มให้สวยกะทัดรัดเข้าคู่กัน)
+# ⬇️ Export Buttons
 if st.session_state.meta_data:
-    st.markdown("### 💾 ดาวน์โหลดเอกสารผลลัพธ์")
+    st.write("")
     all_text_export = f"ร่างขอบเขตของงาน (TOR) - {p_name}\n\n"
     for idx, ct in st.session_state.tor_sections.items():
         all_text_export += f"ข้อ {idx} {TOR_TITLES[idx]}\n{ct}\n\n"
         
     down_col1, down_col2 = st.columns(2)
-    down_col1.download_button("⬇️ ดาวน์โหลดเป็นไฟล์ .TXT", data=all_text_export, file_name=f"TOR_{p_name}.txt", mime="text/plain", use_container_width=True)
+    down_col1.download_button("⬇️ Export .TXT", data=all_text_export, file_name=f"TOR_{p_name}.txt", mime="text/plain", use_container_width=True)
     
     docx_buf = create_docx(p_name, p_agency, "ซื้อ/จ้างทั่วไป", p_budget, p_criteria, st.session_state.tor_sections)
     if docx_buf:
-        down_col2.download_button("📄 ส่งออกเป็นไฟล์ Word (.docx)", data=docx_buf, file_name=f"TOR_{p_name}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+        down_col2.download_button("📄 Export Word (.docx)", data=docx_buf, file_name=f"TOR_{p_name}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
