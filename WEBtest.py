@@ -155,30 +155,38 @@ def summarize_single_file_with_gemini(cleaned_text):
 
 def generate_typhoon_stream(prompt_text, section_num):
     if not typhoon_client: return ""
-    full_response = ""
-    # ใช้ st.empty() ชั่วคราวเพื่อแสดงขณะพิมพ์
-    box_placeholder = st.empty()
     
-    try:
-        response_stream = typhoon_client.chat.completions.create(
-            model=TYPHOON_MODEL,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt_text}],
-            temperature=0.4, stream=True
-        )
-        for chunk in response_stream:
-            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
-                # แสดงผลขณะพิมพ์
-                box_placeholder.markdown(full_response + "▌")
-        
-        # บันทึกค่าลง session_state แบบถาวร
-        st.session_state.tor_sections[section_num] = full_response
-        box_placeholder.empty()
-        
-        # บังคับวาดหน้าจอใหม่ทันที
-        st.rerun() 
-    except Exception as e: 
-        st.error(f"Error: {e}")
+    # 1. เตรียมตัวแปรเก็บค่า
+    full_response = ""
+    
+    # 2. ใช้ st.status เพื่อสร้างกล่องเจนเนอเรตแบบมืออาชีพ (ลดปัญหา UI รวน)
+    with st.status(f"🚀 กำลังร่างข้อ {section_num} ด้วย Typhoon...", expanded=True) as status:
+        try:
+            response_stream = typhoon_client.chat.completions.create(
+                model=TYPHOON_MODEL,
+                messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt_text}],
+                temperature=0.4, stream=True
+            )
+            
+            # โชว์สิ่งที่กำลังพิมพ์ไว้ในกล่อง status
+            markdown_placeholder = st.empty()
+            
+            for chunk in response_stream:
+                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                    full_response += chunk.choices[0].delta.content
+                    markdown_placeholder.markdown(full_response + "▌")
+            
+            # 3. บันทึกผลลัพธ์สุดท้ายลง State หลัก
+            st.session_state.tor_sections[section_num] = full_response
+            
+            status.update(label=f"✅ ข้อ {section_num} เสร็จเรียบร้อย!", state="complete", expanded=False)
+            
+            # 4. รีเฟรชหน้าจอเพื่อให้ text_area อัปเดตค่าจาก State ทันที
+            st.rerun() 
+            
+        except Exception as e: 
+            status.update(label="❌ เกิดข้อผิดพลาด", state="error", expanded=True)
+            st.error(f"Error: {e}")
 # 📄 [EXPORT GENERATORS] 
 def build_word_document():
     doc = Document()
