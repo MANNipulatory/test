@@ -549,7 +549,7 @@ hr { border-color: var(--border) !important; margin: 32px 0 !important; }
 </style>
 """
 
-components.html(_CSS, height=0)
+st.markdown(_CSS, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
 # 3. CONSTANTS
