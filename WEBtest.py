@@ -52,7 +52,6 @@ st.markdown("""
         .stButton button { border-radius: 6px !important; font-size: 0.9rem !important; font-weight: 500 !important; }
         .stButton div button[data-testid="baseButton-primary"] { background: linear-gradient(135deg, #2563EB, #1D4ED8) !important; color: #FFFFFF !important; border: none !important; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2) !important; }
         
-        /* สไตล์กล่องดาวน์โหลดเอกสาร (Export Hub Box) */
         .export-box {
             background-color: rgba(59, 130, 246, 0.04) !important;
             border: 1px dashed rgba(59, 130, 246, 0.3) !important;
@@ -110,21 +109,36 @@ def extract_text_from_pdf(uploaded_file):
         return "".join([page.extract_text() or "" for page in pdf_reader.pages])
     except Exception as e: return ""
 
+# 🛡️ ฟังก์ชันกรองความโปร่งใสตัวเดิม คืนชีพกลับมาทำภารกิจแบบรัดกุม 100%
 def clean_redundant_info(text):
     if not text: return ""
-    text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b', "[PHONE_HIDDEN]", text)
+    # 1. กรองหมายเลขโทรศัพท์รูปแบบต่างๆ
+    text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
+    # 2. กรองที่อยู่อีเมล
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
-    text = re.sub(r'https?://[^\s<>"]+', "[URL_HIDDEN]", text)
-    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    # 3. กรองลิงก์และ URL
+    text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
+    # 4. กรองชื่อบริษัทภาษาไทย หจก. บมจ. บจก. ทุกรูปแบบโครงสร้าง
+    text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)|(\bหจก\s*\.\s*[^\s\n]+)|(\bบมจ\s*\.\s*[^\s\n]+)|(\bบจก\s*\.\s*[^\s\n]+)', "[COMPANY_HIDDEN]", text)
+    # 5. กรองชื่อบริษัทภาษาอังกฤษ (Co., Ltd. / Inc. / Corp.)
+    en_company = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|LLC|Group)\b'
+    text = re.sub(en_company, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
+    # 6. กรองรายชื่อแบรนด์และเครื่องหมายการค้าชั้นนำ เพื่อป้องกันการล็อกสเปคตามกฎพัสดุ ว.159
     text = re.sub(r'\b(Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei)\b', "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
     return text
 
 def summarize_with_gemini(raw_text):
     if not gemini_client or not raw_text: return raw_text
-    prompt = f"อ่านสเปคแล้วสรุปคุณลักษณะทางเทคนิคและเงื่อนไขการรับประกัน โดยรักษาข้อมูลตัวเลขไว้ให้ครบถ้วนที่สุด:\n{raw_text[:12000]}"
+    prompt = f"""
+    คุณคือผู้ช่วยสกัดข้อมูลทางเทคนิค อ่านข้อความด้านล่างนี้แล้วสรุปเนื้อหาสำคัญเกี่ยวกับ 'รายละเอียดคุณลักษณะเฉพาะทางเทคนิคทั้งหมด' 
+    และ 'เงื่อนไขการรับประกันและการสนับสนุน' โดยรักษาข้อมูลตัวเลขสเปคทางเทคนิคไว้ให้ครบถ้วนที่สุด แต่ตัดพวกเศษขยะหรือชื่อคู่ค้าออก
+    [ข้อมูลเอกสาร]:
+    {raw_text[:12000]}
+    """
     try:
         response = call_gemini_with_retry(
-            gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt
+            gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.1)
         )
         return response.text
     except Exception: return raw_text[:3000]
@@ -150,7 +164,6 @@ def generate_typhoon_stream(prompt_text, section_num, placeholder):
 
 # 📄 [EXPORT GENERATORS] ฟังก์ชันแปลงข้อมูลสำหรับดาวน์โหลดเป็นฟอร์แมตต่างๆ
 def build_word_document():
-    """เสกโครงสร้างไฟล์ Word (.docx) แบบสไตล์ราชการสะอาดตา"""
     doc = Document()
     title_p = doc.add_paragraph()
     title_run = title_p.add_run(f"ร่างขอบเขตของงาน (TOR)\nโครงการ: {st.session_state.meta_data.get('title', 'ไม่ได้ระบุ')}")
@@ -175,7 +188,6 @@ def build_word_document():
     return bio.getvalue()
 
 def build_pdf_html_document():
-    """แปลงเนื้อหา TOR ทั้งหมดให้ออกมาเป็น HTML Format เพื่อเปิดให้สั่งเซฟเป็น PDF ได้นิ่งที่สุดผ่านเบราว์เซอร์"""
     html_content = f"""
     <html>
     <head>
@@ -199,7 +211,6 @@ def build_pdf_html_document():
     </body>
     </html>
     """
-    # แทรกเนื้อหา 10 ข้อลงในโครงสร้าง HTML
     for idx in range(1, 11):
         text_inside = st.session_state.tor_sections.get(idx, "").replace("\n", "<br>")
         html_content = html_content.replace("</body>", f"""
@@ -210,7 +221,7 @@ def build_pdf_html_document():
         </body>""")
     return html_content
 
-# ── 6. UI WORKFLOW ───────────────────────────────────────────────
+# ── 4. UI WORKFLOW ───────────────────────────────────────────────
 st.title("🛡️ AI Procurement TOR Workspace")
 st.caption("⚡ Hybrid Core Mode: วิเคราะห์ด้วย Gemini ➔ ร่างข้อกำหนดภาษาราชการเนียนตาด้วย Typhoon")
 
@@ -302,9 +313,8 @@ if st.button("✨ ให้ Typhoon เริ่มร่างข้อกำ�
             time.sleep(2.0)
         st.balloons()
 
-# ── 7. EXPORT HUB (ศูนย์ดาวน์โหลด 3 รูปแบบ) ───────────────────────
+# ── 5. EXPORT HUB (ศูนย์ดาวน์โหลด 3 รูปแบบ) ───────────────────────
 if st.session_state.tor_sections[1] or st.session_state.tor_sections[4]:
-    # ดึงข้อมูลงบและชื่อโครงการสำรองหากยังไม่ได้กดปุ่มรันทั้งหมด
     if not st.session_state.meta_data:
         st.session_state.meta_data = {"title": p_name or "ไม่ได้ระบุชื่อ", "agency": p_agency, "budget": p_budget, "criteria": p_criteria}
         
@@ -312,15 +322,11 @@ if st.session_state.tor_sections[1] or st.session_state.tor_sections[4]:
     st.markdown("### 📥 ศูนย์ส่งออกเอกสาร TOR (Export Hub)")
     st.caption("เลือกดาวน์โหลดไฟล์ขอบเขตงานในรูปแบบที่ต้องการไปใช้งานต่อ")
     
-    # สรุปข้อความสำหรับไฟล์ .TXT
     all_text_export = f"ร่างขอบเขตของงาน (TOR) - {st.session_state.meta_data['title']}\n\n"
     for idx, ct in st.session_state.tor_sections.items():
         all_text_export += f"ข้อ {idx} {TOR_TITLES[idx]}\n{ct}\n\n"
         
-    # เตรียมข้อมูล Word
     word_bytes = build_word_document()
-    
-    # เตรียมข้อมูล HTML สำหรับปริ้นท์ออก PDF
     html_printable = build_pdf_html_document()
     
     dl_col1, dl_col2, dl_col3 = st.columns(3)
@@ -342,7 +348,6 @@ if st.session_state.tor_sections[1] or st.session_state.tor_sections[4]:
             use_container_width=True
         )
     with dl_col3:
-        # เทคนิคสร้าง PDF สไตล์มินิมอลแบบเสถียร 100%: พ่น HTML สวยๆ แล้วให้ผู้ใช้กด Ctrl+P หรือ Save as PDF ได้ฟอนต์ไทยแท้ชัวร์
         st.download_button(
             label="🖨️ เปิดพิมพ์ / บันทึกเป็น PDF",
             data=html_printable,
