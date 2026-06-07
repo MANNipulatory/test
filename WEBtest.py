@@ -154,24 +154,37 @@ def summarize_single_file_with_gemini(cleaned_text):
         return cleaned_text[:2000]
 
 def generate_typhoon_stream(prompt_text, section_num, placeholder):
-    if not typhoon_client: return ""
+    if not typhoon_client: 
+        st.error("❌ ไม่พบ API Key ของ Typhoon")
+        return ""
     full_response = ""
     try:
         response_stream = call_typhoon_with_retry(
             typhoon_client.chat.completions.create,
             model=TYPHOON_MODEL,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt_text}],
-            temperature=0.4, stream=True
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT}, 
+                {"role": "user", "content": prompt_text}
+            ],
+            temperature=0.4, 
+            stream=True
         )
         for chunk in response_stream:
-            if chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
-                placeholder.code(full_response + "▌", language="text")
+            # ✅ ปรับการเช็คให้ปลอดภัยยิ่งขึ้น ป้องกันกรณี content เป็น None หรือค่าว่าง
+            if hasattr(chunk, 'choices') and chunk.choices:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content is not None:
+                    full_response += delta.content
+                    # แสดงผลแบบ Real-time บนหน้าจอ
+                    placeholder.code(full_response + "▌", language="text")
+                    
+        # เมื่อรันเสร็จสิ้น ให้แสดงข้อความตัวเต็มแบบไม่มีเคอร์เซอร์ บันทึกลงระบบ
         placeholder.code(full_response, language="text")
         st.session_state.tor_sections[section_num] = full_response
         return full_response
-    except Exception as e: return ""
-
+    except Exception as e: 
+        st.error(f"❌ เกิดข้อผิดพลาดในการรัน Typhoon ข้อ {section_num}: {e}")
+        return ""
 # 📄 [EXPORT GENERATORS] 
 def build_word_document():
     doc = Document()
