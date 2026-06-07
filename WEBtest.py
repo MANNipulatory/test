@@ -2,81 +2,448 @@ import streamlit as st
 import os
 import io
 import re
-import time
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError as GeminiAPIError
 from openai import OpenAI
 import pypdf
 from docx import Document
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# ── 1. INITIALIZATION (HYBRID CREW) ──────────────────────────────
-if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
-    gemini_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-elif os.environ.get("GEMINI_API_KEY"):
-    gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-else:
-    gemini_client = None
+# ══════════════════════════════════════════════════════════════════
+# 1. CLIENTS
+# ══════════════════════════════════════════════════════════════════
+def _get_secret(key):
+    if key in st.secrets and st.secrets[key]: return st.secrets[key]
+    return os.environ.get(key)
 
-GEMINI_MODEL = "gemini-2.5-flash"
+gemini_key  = _get_secret("GEMINI_API_KEY")
+typhoon_key = _get_secret("TYPHOON_API_KEY")
+gemini_client  = genai.Client(api_key=gemini_key)   if gemini_key  else None
+typhoon_client = OpenAI(api_key=typhoon_key, base_url="https://api.opentyphoon.ai/v1") if typhoon_key else None
 
-if "TYPHOON_API_KEY" in st.secrets and st.secrets["TYPHOON_API_KEY"]:
-    typhoon_key = st.secrets["TYPHOON_API_KEY"]
-elif os.environ.get("TYPHOON_API_KEY"):
-    typhoon_key = os.environ.get("TYPHOON_API_KEY")
-else:
-    typhoon_key = None
-
-if typhoon_key:
-    typhoon_client = OpenAI(api_key=typhoon_key, base_url="https://api.opentyphoon.ai/v1")
-else:
-    typhoon_client = None
-
+GEMINI_MODEL  = "gemini-2.5-flash"
 TYPHOON_MODEL = "typhoon-v2.5-30b-a3b-instruct"
 
-st.set_page_config(
-    page_title="AI Procurement TOR Workspace",
-    page_icon="🛡️",
-    layout="wide"
-)
+# ══════════════════════════════════════════════════════════════════
+# 2. PAGE CONFIG & DESIGN SYSTEM
+# ══════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="TOR Workspace", page_icon="🛡️", layout="wide")
 
-# 🎨 [ELEVATED MINIMALISM DESIGN]
 st.markdown("""
-    <style>
-        .block-container { max-width: 1000px !important; padding-top: 2.5rem !important; padding-bottom: 5rem !important; }
-        h2 { font-size: 1.3rem !important; font-weight: 700 !important; color: #1E3A8A; margin-top: 2.5rem !important; margin-bottom: 1.2rem !important; padding-left: 12px !important; border-left: 4px solid #3B82F6 !important; }
-        .stTextArea textarea { background-color: rgba(128, 128, 128, 0.06) !important; border: 1px solid rgba(128, 128, 128, 0.2) !important; border-radius: 8px !important; padding: 12px !important; font-size: 0.95rem !important; }
-        .stTextArea textarea:focus { border-color: #3B82F6 !important; background-color: transparent !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important; }
-        .stTextInput input { background-color: rgba(128, 128, 128, 0.06) !important; border: 1px solid rgba(128, 128, 128, 0.2) !important; border-radius: 8px !important; }
-        .streamlit-expanderHeader { background-color: rgba(128, 128, 128, 0.04) !important; border: 1px solid rgba(128, 128, 128, 0.15) !important; border-radius: 8px !important; font-weight: 600 !important; }
-        .stButton button { border-radius: 6px !important; font-size: 0.9rem !important; font-weight: 500 !important; }
-        .stButton div button[data-testid="baseButton-primary"] { background: linear-gradient(135deg, #2563EB, #1D4ED8) !important; color: #FFFFFF !important; border: none !important; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2) !important; }
-        
-        .export-box {
-            background-color: rgba(59, 130, 246, 0.04) !important;
-            border: 1px dashed rgba(59, 130, 246, 0.3) !important;
-            border-radius: 12px !important;
-            padding: 20px !important;
-            margin-top: 30px;
-        }
-        .token-saving-banner {
-            background-color: rgba(16, 185, 129, 0.1) !important;
-            border: 1px solid rgba(16, 185, 129, 0.3) !important;
-            padding: 12px !important;
-            border-radius: 8px !important;
-            color: #047857 !important;
-            font-size: 0.9rem !important;
-            margin-bottom: 15px;
-            font-weight: 500;
-        }
-    </style>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, [class*="css"] {
+    font-family: 'Noto Sans Thai', sans-serif !important;
+}
+.stApp {
+    background: #0F1623;
+    color: #E2E8F0;
+}
+
+/* ── Hide default Streamlit chrome ── */
+#MainMenu, footer, header { visibility: hidden; }
+.block-container {
+    max-width: 1100px !important;
+    padding: 2rem 2rem 6rem !important;
+}
+
+/* ── App Header ── */
+.app-header {
+    background: linear-gradient(135deg, #1a2744 0%, #162035 100%);
+    border: 1px solid rgba(99,179,237,0.15);
+    border-radius: 16px;
+    padding: 28px 36px;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+}
+.app-header::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 300px; height: 100%;
+    background: radial-gradient(ellipse at right center, rgba(59,130,246,0.12) 0%, transparent 70%);
+    pointer-events: none;
+}
+.app-header-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #F0F6FF;
+    margin: 0 0 6px;
+    letter-spacing: -0.3px;
+}
+.app-header-sub {
+    font-size: 0.85rem;
+    color: #7FA8CC;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.badge {
+    background: rgba(59,130,246,0.18);
+    color: #93C5FD;
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+/* ── Section Header ── */
+.sec-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 36px 0 20px;
+}
+.sec-number {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #2563EB, #1D4ED8);
+    color: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+}
+.sec-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #CBD5E1;
+    margin: 0;
+}
+
+/* ── Cards ── */
+.card {
+    background: #1A2235;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+}
+.card-tight { padding: 16px 20px; }
+
+/* ── Form Elements ── */
+.stTextInput > label, .stTextArea > label,
+.stNumberInput > label, .stRadio > label,
+.stFileUploader > label {
+    color: #94A3B8 !important;
+    font-size: 0.82rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.3px !important;
+    text-transform: uppercase !important;
+    margin-bottom: 6px !important;
+}
+.stTextInput input, .stNumberInput input {
+    background: #0F1623 !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 8px !important;
+    color: #E2E8F0 !important;
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    font-size: 0.95rem !important;
+    padding: 10px 14px !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+.stTextInput input:focus, .stNumberInput input:focus {
+    border-color: #3B82F6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.2) !important;
+    background: #0F1623 !important;
+}
+.stTextArea textarea {
+    background: #0F1623 !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 8px !important;
+    color: #E2E8F0 !important;
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    font-size: 0.93rem !important;
+    line-height: 1.7 !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    resize: vertical !important;
+}
+.stTextArea textarea:focus {
+    border-color: #3B82F6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.2) !important;
+}
+
+/* ── Radio ── */
+.stRadio > div { gap: 12px !important; }
+.stRadio [data-testid="stMarkdownContainer"] p { color: #CBD5E1 !important; font-size: 0.9rem !important; }
+
+/* ── Buttons ── */
+.stButton > button {
+    border-radius: 8px !important;
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    transition: all 0.18s !important;
+    border: 1px solid transparent !important;
+}
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
+    color: white !important;
+    box-shadow: 0 4px 14px rgba(37,99,235,0.35) !important;
+    border: none !important;
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(37,99,235,0.45) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: rgba(255,255,255,0.05) !important;
+    color: #94A3B8 !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    background: rgba(255,255,255,0.09) !important;
+    color: #E2E8F0 !important;
+    border-color: rgba(255,255,255,0.2) !important;
+}
+.stButton > button:disabled {
+    opacity: 0.4 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+/* ── TOR Section Cards ── */
+.tor-card {
+    background: #1A2235;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.tor-card:hover { border-color: rgba(59,130,246,0.25); }
+.tor-card.generating {
+    border-color: rgba(59,130,246,0.5);
+    box-shadow: 0 0 0 1px rgba(59,130,246,0.2), 0 4px 24px rgba(59,130,246,0.12);
+}
+.tor-card.done { border-color: rgba(16,185,129,0.3); }
+
+.tor-card-header {
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+.tor-num {
+    width: 26px; height: 26px;
+    background: rgba(37,99,235,0.2);
+    color: #60A5FA;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.tor-num.done-num {
+    background: rgba(16,185,129,0.2);
+    color: #34D399;
+}
+.tor-title-text {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #CBD5E1;
+    flex: 1;
+}
+
+/* ── Status Badges ── */
+.status-gen {
+    background: rgba(245,158,11,0.15);
+    color: #FCD34D;
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 6px;
+    padding: 2px 9px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    animation: pulse-badge 1.2s ease-in-out infinite;
+}
+.status-done {
+    background: rgba(16,185,129,0.12);
+    color: #34D399;
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 6px;
+    padding: 2px 9px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+@keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
+/* ── Alert / Info boxes ── */
+.info-box {
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #93C5FD;
+    font-size: 0.88rem;
+    margin: 12px 0;
+}
+.warn-box {
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #FCD34D;
+    font-size: 0.88rem;
+    margin: 12px 0;
+}
+.success-box {
+    background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #34D399;
+    font-size: 0.88rem;
+    margin: 12px 0;
+}
+.error-box {
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #FCA5A5;
+    font-size: 0.88rem;
+    margin: 12px 0;
+}
+
+/* ── Progress bar ── */
+.stProgress > div > div > div {
+    background: linear-gradient(90deg, #2563EB, #60A5FA) !important;
+    border-radius: 99px !important;
+}
+.stProgress > div > div {
+    background: rgba(255,255,255,0.07) !important;
+    border-radius: 99px !important;
+}
+
+/* ── File uploader ── */
+[data-testid="stFileUploader"] {
+    background: rgba(255,255,255,0.03) !important;
+    border: 1.5px dashed rgba(255,255,255,0.12) !important;
+    border-radius: 10px !important;
+    padding: 8px !important;
+    transition: border-color 0.2s !important;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: rgba(59,130,246,0.4) !important;
+}
+
+/* ── Expander (used in PDF review) ── */
+.streamlit-expanderHeader {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 8px !important;
+    color: #CBD5E1 !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+}
+
+/* ── Checkbox ── */
+.stCheckbox label { color: #94A3B8 !important; font-size: 0.88rem !important; }
+
+/* ── Download buttons ── */
+.stDownloadButton > button {
+    background: rgba(255,255,255,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    color: #CBD5E1 !important;
+    border-radius: 10px !important;
+    font-family: 'Noto Sans Thai', sans-serif !important;
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    padding: 12px 16px !important;
+    width: 100% !important;
+    transition: all 0.18s !important;
+}
+.stDownloadButton > button:hover {
+    background: rgba(59,130,246,0.15) !important;
+    border-color: rgba(59,130,246,0.4) !important;
+    color: #93C5FD !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Export section ── */
+.export-section {
+    background: linear-gradient(135deg, #1a2744 0%, #162035 100%);
+    border: 1px solid rgba(99,179,237,0.15);
+    border-radius: 16px;
+    padding: 28px;
+    margin-top: 36px;
+}
+
+/* ── Divider ── */
+hr { border-color: rgba(255,255,255,0.07) !important; margin: 28px 0 !important; }
+
+/* ── Spinner ── */
+.stSpinner > div { border-top-color: #3B82F6 !important; }
+
+/* ── Toast ── */
+[data-testid="stToast"] {
+    background: #1A2235 !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    color: #E2E8F0 !important;
+    border-radius: 10px !important;
+}
+
+/* ── Streaming text container ── */
+.stream-container {
+    background: #0F1623;
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 8px;
+    padding: 16px;
+    min-height: 80px;
+    font-size: 0.92rem;
+    line-height: 1.8;
+    color: #CBD5E1;
+}
+
+/* ── Queue progress bar ── */
+.queue-track {
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    height: 4px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+.queue-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2563EB, #60A5FA);
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+</style>
 """, unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════════════
+# 3. CONSTANTS
+# ══════════════════════════════════════════════════════════════════
 TOR_TITLES = {
-    1: "ความเป็นมา", 2: "วัตถุประสงค์", 3: "คุณสมบัติผู้ยื่นข้อเสนอ",
-    4: "แบบรูปรายการ หรือคุณลักษณะเฉพาะของพัสดุ", 5: "ระยะเวลาดำเนินการ",
-    6: "ระยะเวลาส่งมอบงาน หรือส่งมอบพัสดุ", 7: "หลักเกณฑ์ในการพิจารณาคัดเลือกข้อเสนอ",
-    8: "อัตราค่าปรับ", 9: "การรับประกันความชำรุดบกพร่อง", 10: "ข้อสงวนสิทธิ์ในการยื่นข้อเสนอและอื่นๆ"
+    1: "ความเป็นมา",
+    2: "วัตถุประสงค์",
+    3: "คุณสมบัติผู้ยื่นข้อเสนอ",
+    4: "แบบรูปรายการ หรือคุณลักษณะเฉพาะของพัสดุ",
+    5: "ระยะเวลาดำเนินการ",
+    6: "ระยะเวลาส่งมอบงาน หรือส่งมอบพัสดุ",
+    7: "หลักเกณฑ์ในการพิจารณาคัดเลือกข้อเสนอ",
+    8: "อัตราค่าปรับ",
+    9: "การรับประกันความชำรุดบกพร่อง",
+    10: "ข้อสงวนสิทธิ์ในการยื่นข้อเสนอและอื่นๆ"
 }
 
 SYSTEM_PROMPT = (
@@ -88,36 +455,58 @@ SYSTEM_PROMPT = (
     "ห้ามแปลเนื้อหาเป็นภาษาอังกฤษล้วน ให้ตอบเป็นภาษาไทยอย่างเป็นทางการเท่านั้น"
 )
 
-# ── 2. STATE MANAGEMENT ──────────────────────────────────────────
-if "tor_sections" not in st.session_state: st.session_state.tor_sections = {i: "" for i in range(1, 11)}
-if "meta_data" not in st.session_state: st.session_state.meta_data = {}
-if "pdf_pre_cleaned_texts" not in st.session_state: st.session_state.pdf_pre_cleaned_texts = {}
-if "ai_drafted_spec_v4" not in st.session_state: st.session_state.ai_drafted_spec_v4 = ""
+# แบรนด์ครอบคลุมสำหรับงาน IT/Office ราชการ
+IT_BRANDS = (
+    r"Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei|"
+    r"Samsung|LG|Epson|Canon|Panasonic|Sony|Fujitsu|Brother|Xerox|Toshiba|Sharp|Ricoh|"
+    r"Kyocera|Hitachi|NEC|D-Link|TP-Link|Netgear|Synology|QNAP|Seagate|WD|Western Digital|"
+    r"Kingston|Corsair|Logitech|Belkin|APC|Schneider|IBM|Oracle|VMware|Fortinet"
+)
 
-# ── 3. HELPERS & GENERATORS ──────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+# 4. STATE MANAGEMENT
+# ══════════════════════════════════════════════════════════════════
+_DEFAULTS = {
+    "tor_sections":         {i: "" for i in range(1, 11)},
+    "meta_data":            {},
+    "pdf_pre_cleaned_texts":{},
+    "ai_drafted_spec_v4":   "",
+    "generating_section":   None,
+    "generate_all_queue":   [],
+    "gen_error":            None,   # FIX: เก็บ error จาก generate เพื่อหยุดคิว
+    "proj_name":            "",     # FIX: persist form fields ใน state
+    "proj_agency":          "",
+    "proj_budget":          0,
+    "proj_criteria":        "เกณฑ์ราคา",
+}
+for k, v in _DEFAULTS.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# ══════════════════════════════════════════════════════════════════
+# 5. HELPERS
+# ══════════════════════════════════════════════════════════════════
+
+# FIX: retry ที่มี raise fallback ชัดเจน
 def call_gemini_with_retry(func, *args, **kwargs):
-    max_retries = 3
-    for attempt in range(max_retries):
-        try: return func(*args, **kwargs)
+    last_exc = None
+    for attempt in range(3):
+        try:
+            return func(*args, **kwargs)
         except GeminiAPIError as e:
-            if e.code in [429, 503]: time.sleep(5); continue
+            last_exc = e
+            if e.code in [429, 503]:
+                import time; time.sleep(5 * (attempt + 1))
+                continue
             raise e
-
-def call_typhoon_with_retry(func, *args, **kwargs):
-    max_retries = 5
-    for attempt in range(max_retries):
-        try: return func(*args, **kwargs)
-        except Exception as e:
-            err_msg = str(e).lower()
-            if any(k in err_msg for k in ["rate_limit", "429", "503", "overloaded"]):
-                time.sleep(15); continue
-            raise e
+    raise last_exc  # re-raise หลังครบ retry
 
 def extract_text_from_pdf(uploaded_file):
     try:
-        pdf_reader = pypdf.PdfReader(uploaded_file)
-        return "".join([page.extract_text() or "" for page in pdf_reader.pages])
-    except Exception as e: return ""
+        reader = pypdf.PdfReader(uploaded_file)
+        return "".join([p.extract_text() or "" for p in reader.pages])
+    except:
+        return ""
 
 def local_regex_cleaner(text):
     if not text: return ""
@@ -125,291 +514,530 @@ def local_regex_cleaner(text):
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
     text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
     text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)', "[COMPANY_HIDDEN]", text)
-    en_company = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|LLC|Group)\b'
-    text = re.sub(en_company, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
-    text = re.sub(r'\b(Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei)\b', "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
+    en_co = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|LLC|Group)\b'
+    text = re.sub(en_co, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
+    # FIX: ใช้ list แบรนด์ที่ครอบคลุมกว่าเดิม
+    text = re.sub(IT_BRANDS, "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
     return text
+
+def _extract_gemini_text(response):
+    if hasattr(response, 'text') and response.text:
+        return response.text
+    if hasattr(response, 'candidates') and response.candidates:
+        return response.candidates[0].content.parts[0].text
+    return ""
 
 def summarize_single_file_with_gemini(cleaned_text):
     if not gemini_client or not cleaned_text: return cleaned_text
-    prompt = f"""
-    จงสกัดเฉพาะ 'ข้อมูลข้อกำหนดคุณลักษณะเฉพาะทางเทคนิค' และ 'เงื่อนไขการสนับสนุน/การรับประกัน' จากเอกสารที่ผ่านการคลีนแบรนด์มาแล้วด้านล่างนี้
-    สรุปให้กระชับและสั้นที่สุดโดยรักษาข้อมูลตัวเลขทางเทคนิคไว้ครบถ้วน ห้ามเอาเนื้อหาน้ำท่วมทุ่ง เพื่อประหยัดพื้นที่กระดาษ:
-    
-    [เนื้อหาเอกสาร]:
-    {cleaned_text[:12000]}
-    """
+    prompt = (
+        "จงสกัดเฉพาะ 'ข้อมูลข้อกำหนดคุณลักษณะเฉพาะทางเทคนิค' และ "
+        "'เงื่อนไขการสนับสนุน/การรับประกัน' จากเอกสารด้านล่าง\n"
+        "สรุปกระชับ รักษาตัวเลขทางเทคนิคไว้ครบถ้วน:\n\n"
+        f"[เนื้อหาเอกสาร]:\n{cleaned_text[:12000]}"
+    )
     try:
-        response = call_gemini_with_retry(
-            gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.1)
+        resp = call_gemini_with_retry(
+            gemini_client.models.generate_content, model=GEMINI_MODEL,
+            contents=prompt, config=types.GenerateContentConfig(temperature=0.1)
         )
-        # ✅ จุดแก้ไขที่ 1: ดักจับโครงสร้างข้อมูลจาก SDK ตัวใหม่
-        if hasattr(response, 'text') and response.text:
-            return response.text
-        elif hasattr(response, 'candidates') and response.candidates:
-            return response.candidates[0].content.parts[0].text
-        return "ไม่สามารถสกัดข้อมูลสเปคได้"
-    except Exception: 
-        return cleaned_text[:2000]
+        return _extract_gemini_text(resp) or cleaned_text[:2000]
+    except Exception as e:
+        return f"[สกัดสเปคไม่สำเร็จ: {e}]\n\n{cleaned_text[:2000]}"
 
-def generate_typhoon_stream(prompt_text, section_num):
-    if not typhoon_client: return ""
-    
-    # 1. เตรียมตัวแปรเก็บค่า
+# FIX: generate function — stream ลง placeholder, return full text, ไม่ rerun
+def generate_typhoon_section(section_num, prompt_text, stream_placeholder):
+    if not typhoon_client:
+        stream_placeholder.markdown('<div class="error-box">❌ ไม่พบ Typhoon API Key</div>', unsafe_allow_html=True)
+        return ""
     full_response = ""
-    
-    # 2. ใช้ st.status เพื่อสร้างกล่องเจนเนอเรตแบบมืออาชีพ (ลดปัญหา UI รวน)
-    with st.status(f"🚀 กำลังร่างข้อ {section_num} ด้วย Typhoon...", expanded=True) as status:
-        try:
-            response_stream = typhoon_client.chat.completions.create(
-                model=TYPHOON_MODEL,
-                messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt_text}],
-                temperature=0.4, stream=True
-            )
-            
-            # โชว์สิ่งที่กำลังพิมพ์ไว้ในกล่อง status
-            markdown_placeholder = st.empty()
-            
-            for chunk in response_stream:
-                if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                    full_response += chunk.choices[0].delta.content
-                    markdown_placeholder.markdown(full_response + "▌")
-            
-            # 3. บันทึกผลลัพธ์สุดท้ายลง State หลัก
-            st.session_state.tor_sections[section_num] = full_response
-            
-            status.update(label=f"✅ ข้อ {section_num} เสร็จเรียบร้อย!", state="complete", expanded=False)
-            
-            # 4. รีเฟรชหน้าจอเพื่อให้ text_area อัปเดตค่าจาก State ทันที
-            st.rerun() 
-            
-        except Exception as e: 
-            status.update(label="❌ เกิดข้อผิดพลาด", state="error", expanded=True)
-            st.error(f"Error: {e}")
-# 📄 [EXPORT GENERATORS] 
+    try:
+        stream = typhoon_client.chat.completions.create(
+            model=TYPHOON_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": prompt_text}
+            ],
+            temperature=0.4,
+            stream=True
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, 'content') and delta.content:
+                full_response += delta.content
+                stream_placeholder.markdown(
+                    f'<div class="stream-container">{full_response}▌</div>',
+                    unsafe_allow_html=True
+                )
+        stream_placeholder.markdown(
+            f'<div class="stream-container">{full_response}</div>',
+            unsafe_allow_html=True
+        )
+        st.session_state.tor_sections[section_num] = full_response
+        st.session_state.gen_error = None
+        return full_response
+    except Exception as e:
+        err_msg = str(e)
+        stream_placeholder.markdown(
+            f'<div class="error-box">❌ เกิดข้อผิดพลาดในข้อ {section_num}: {err_msg}</div>',
+            unsafe_allow_html=True
+        )
+        st.session_state.gen_error = err_msg  # FIX: บันทึก error เพื่อหยุดคิว
+        return ""
+
+# FIX: on_change callback factory สร้างครั้งเดียว
+def _make_on_change(idx):
+    def _cb():
+        st.session_state.tor_sections[idx] = st.session_state[f"ta_{idx}"]
+    return _cb
+
+_ON_CHANGE = {i: _make_on_change(i) for i in range(1, 11)}
+
+# ══════════════════════════════════════════════════════════════════
+# 6. EXPORT BUILDERS
+# ══════════════════════════════════════════════════════════════════
 def build_word_document():
     doc = Document()
+    # FIX: Set Thai-compatible font
+    style = doc.styles['Normal']
+    style.font.name = 'TH Sarabun New'
+    style.font.size = Pt(14)
+
     title_p = doc.add_paragraph()
-    title_run = title_p.add_run(f"ร่างขอบเขตของงาน (TOR)\nโครงการ: {st.session_state.meta_data.get('title', 'ไม่ได้ระบุ')}")
-    title_run.bold = True
-    title_run.font.size = 203200
-    
-    doc.add_paragraph(f"หน่วยงานเจ้าของโครงการ: {st.session_state.meta_data.get('agency', '-')}")
-    doc.add_paragraph(f"วงเงินงบประมาณ: {st.session_state.meta_data.get('budget', 0):,} บาท")
-    doc.add_paragraph("-" * 40)
-    
+    title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = title_p.add_run("ร่างขอบเขตของงาน (TOR)")
+    r.bold = True; r.font.size = Pt(18)
+    r.font.name = 'TH Sarabun New'
+    r.font.color.rgb = RGBColor(0x1E, 0x3A, 0x8A)
+
+    meta = st.session_state.meta_data
+    sub_p = doc.add_paragraph()
+    sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub_r = sub_p.add_run(f"โครงการ: {meta.get('title','ไม่ได้ระบุ')}")
+    sub_r.font.size = Pt(15); sub_r.font.name = 'TH Sarabun New'
+
+    doc.add_paragraph(f"หน่วยงาน: {meta.get('agency','-')}").runs[0].font.name = 'TH Sarabun New'
+    doc.add_paragraph(f"วงเงินงบประมาณ: {meta.get('budget',0):,} บาท").runs[0].font.name = 'TH Sarabun New'
+    doc.add_paragraph("─" * 50)
+
     for idx in range(1, 11):
-        heading = doc.add_paragraph()
-        h_run = heading.add_run(f"ข้อ {idx} {TOR_TITLES[idx]}")
-        h_run.bold = True
-        
-        content = st.session_state.tor_sections.get(idx, "ไม่มีเนื้อหา")
-        doc.add_paragraph(content)
+        hp = doc.add_paragraph()
+        hr = hp.add_run(f"ข้อ {idx}  {TOR_TITLES[idx]}")
+        hr.bold = True; hr.font.size = Pt(15); hr.font.name = 'TH Sarabun New'
+        hr.font.color.rgb = RGBColor(0x1E, 0x3A, 0x8A)
+        cp = doc.add_paragraph(st.session_state.tor_sections.get(idx, "ไม่มีเนื้อหา"))
+        cp.runs[0].font.name = 'TH Sarabun New'
         doc.add_paragraph()
-        
-    bio = io.BytesIO()
-    doc.save(bio)
-    return bio.getvalue()
+    bio = io.BytesIO(); doc.save(bio); return bio.getvalue()
 
-def build_pdf_html_document():
-    html_content = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: 'Sarabun', 'Tahama', sans-serif; padding: 40px; color: #333; line-height: 1.6; }}
-            h1 {{ text-align: center; font-size: 22px; margin-bottom: 5px; }}
-            .meta {{ text-align: center; font-size: 14px; color: #555; margin-bottom: 30px; }}
-            .section {{ margin-bottom: 25px; page-break-inside: avoid; }}
-            .title {{ font-weight: bold; font-size: 16px; color: #1E3A8A; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }}
-            .content {{ font-size: 14px; white-space: pre-wrap; text-align: justify; }}
-        </style>
-    </head>
-    <body>
-        <h1>ร่างขอบเขตของงาน (TOR)</h1>
-        <div class="meta">
-            <b>โครงการ:</b> {st.session_state.meta_data.get('title', '-')}<br>
-            <b>หน่วยงาน:</b> {st.session_state.meta_data.get('agency', '-') or 'ไม่ได้ระบุ'} | 
-            <b>งบประมาณ:</b> {st.session_state.meta_data.get('budget', 0):,} บาท
-        </div>
-    </body>
-    </html>
-    """
+def build_html_document():
+    meta = st.session_state.meta_data
+    sections_html = ""
     for idx in range(1, 11):
-        text_inside = st.session_state.tor_sections.get(idx, "").replace("\n", "<br>")
-        html_content = html_content.replace("</body>", f"""
-        <div class="section">
-            <div class="title">ข้อ {idx} {TOR_TITLES[idx]}</div>
-            <div class="content">{text_inside}</div>
-        </div>
-        </body>""")
-    return html_content
+        txt = st.session_state.tor_sections.get(idx, "").replace("\n", "<br>")
+        sections_html += (
+            f'<div class="section">'
+            f'<div class="sec-title">ข้อ {idx} &nbsp;{TOR_TITLES[idx]}</div>'
+            f'<div class="sec-content">{txt}</div></div>'
+        )
+    return f"""<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+body{{font-family:'Noto Sans Thai',sans-serif;padding:48px 60px;color:#1e293b;line-height:1.8;max-width:860px;margin:0 auto}}
+h1{{text-align:center;font-size:22px;color:#1E3A8A;margin-bottom:4px}}
+.meta{{text-align:center;font-size:13px;color:#64748b;margin-bottom:36px}}
+.section{{margin-bottom:28px;page-break-inside:avoid}}
+.sec-title{{font-weight:700;font-size:15px;color:#1E3A8A;border-left:3px solid #3B82F6;
+   padding:4px 0 4px 12px;margin-bottom:10px;background:#F0F6FF;border-radius:0 4px 4px 0}}
+.sec-content{{font-size:14px;text-align:justify;padding-left:4px}}
+</style></head><body>
+<h1>ร่างขอบเขตของงาน (TOR)</h1>
+<div class="meta">
+  <strong>โครงการ:</strong> {meta.get('title','-')} &nbsp;|&nbsp;
+  <strong>หน่วยงาน:</strong> {meta.get('agency','-') or 'ไม่ได้ระบุ'} &nbsp;|&nbsp;
+  <strong>งบประมาณ:</strong> {meta.get('budget',0):,} บาท
+</div>
+{sections_html}</body></html>"""
 
-# ── 4. UI WORKFLOW ───────────────────────────────────────────────
-st.title("🛡️ AI Procurement TOR Workspace")
-st.caption("⚡ Hybrid Core Mode: วิเคราะห์ด้วย Gemini ➔ ร่างข้อกำหนดภาษาราชการเนียนตาด้วย Typhoon")
+# ══════════════════════════════════════════════════════════════════
+# 7. UI — HEADER
+# ══════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="app-header">
+  <div class="app-header-title">🛡️ AI Procurement TOR Workspace</div>
+  <div class="app-header-sub">
+    <span class="badge">Gemini 2.5 Flash</span>
+    <span class="badge">Typhoon v2.5</span>
+    <span>ระบบช่วยร่างขอบเขตของงาน (TOR) ตามมาตรฐาน ว.159 กรมบัญชีกลาง</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-st.markdown("## 1. ข้อมูลโครงการทั่วไป")
-col_form1, col_form2 = st.columns(2)
-with col_form1:
-    p_name = st.text_input("ชื่อโครงการ / งานจัดซื้อจัดจ้าง *", placeholder="ระบุชื่อโครงการ...")
-    p_agency = st.text_input("หน่วยงาน / ส่วนราชการ", placeholder="ระบุหน่วยงานผู้รับผิดชอบ...")
-with col_form2:
-    p_budget = st.number_input("วงเงินงบประมาณ (บาท) *", min_value=0, step=5000, value=0)
-    p_criteria = st.radio("หลักเกณฑ์การคัดเลือกข้อเสนอ", ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"], horizontal=True)
+# ══════════════════════════════════════════════════════════════════
+# 8. STEP 1 — PROJECT INFO (persist ใน state)
+# ══════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="sec-header">
+  <div class="sec-number">1</div>
+  <p class="sec-title">ข้อมูลโครงการ</p>
+</div>""", unsafe_allow_html=True)
 
-st.markdown("## 2. ขั้นตอนสกัดสเปคอ้างอิงและคัดกรองความโปร่งใส (ประหยัด Token)")
-job_description_pdf = st.text_area("วัตถุประสงค์ / ลักษณะงานที่ต้องการใช้งานจริง:", placeholder="อธิบายเป้าหมายการใช้งานจริงเพื่อนำทาง AI...", height=80)
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        # FIX: ผูก widget กับ session_state โดยตรงเพื่อ persist ข้ามรอบ rerun
+        p_name = st.text_input(
+            "ชื่อโครงการ / งานจัดซื้อจัดจ้าง *",
+            value=st.session_state.proj_name,
+            placeholder="เช่น จัดซื้อครุภัณฑ์คอมพิวเตอร์ ประจำปี 2568",
+            key="inp_name"
+        )
+        st.session_state.proj_name = p_name
 
-col_file1, col_file2 = st.columns([3, 1])
-with col_file1:
-    uploaded_files = st.file_uploader("อัปโหลดไฟล์ PDF อ้างอิงจากคู่ค้าหลายๆ ราย", type=["pdf"], accept_multiple_files=True, label_visibility="collapsed")
-with col_file2:
-    pre_clean_click = st.button("✂️ ใช้ Regex ตัดและคลีนข้อมูลด่วนก่อน", use_container_width=True)
+        p_agency = st.text_input(
+            "หน่วยงาน / ส่วนราชการ",
+            value=st.session_state.proj_agency,
+            placeholder="เช่น กองพัสดุ กรมXXX",
+            key="inp_agency"
+        )
+        st.session_state.proj_agency = p_agency
 
-if uploaded_files and pre_clean_click:
-    st.session_state.pdf_pre_cleaned_texts = {}
-    with st.spinner("⚡ ระบบกำลังใช้ Regex สับกรองคำล็อกสเปคบนเครื่องให้อย่างรวดเร็ว..."):
-        for file in uploaded_files:
-            raw_text = extract_text_from_pdf(file)
-            cleaned_by_regex = local_regex_cleaner(raw_text)
-            st.session_state.pdf_pre_cleaned_texts[file.name] = cleaned_by_regex
+    with c2:
+        p_budget = st.number_input(
+            "วงเงินงบประมาณ (บาท) *",
+            min_value=0, step=5000,
+            value=st.session_state.proj_budget,
+            key="inp_budget"
+        )
+        st.session_state.proj_budget = p_budget
 
-if st.session_state.pdf_pre_cleaned_texts:
-    st.markdown("<div class='token-saving-banner'>💡 ขั้นตอนประหยัด Token: โปรดตรวจสอบและลบชื่อบริษัทหรือข้อมูลล็อกสเปคที่ยังตกค้างในกล่องข้อความด้านล่างนี้แยกตามไฟล์ ก่อนกดส่งไปสรุปด้วย AI</div>", unsafe_allow_html=True)
-    
-    for file_name, text_content in list(st.session_state.pdf_pre_cleaned_texts.items()):
-        with st.expander(f"📁 ดักกรองเนื้อหาไฟล์: {file_name}", expanded=True):
-            user_verified_text = st.text_area(
-                "พี่สามารถพิมพ์ลบหรือแก้ไขเนื้อหาข้อความตรงนี้เพิ่มเติมได้โดยตรง:",
-                value=text_content,
-                height=180,
-                key=f"user_verify_box_{file_name}"
-            )
-            st.session_state.pdf_pre_cleaned_texts[file_name] = user_verified_text
-            
+        p_criteria = st.radio(
+            "หลักเกณฑ์การคัดเลือกข้อเสนอ",
+            ["เกณฑ์ราคา", "เกณฑ์ราคาประกอบเกณฑ์อื่น"],
+            index=["เกณฑ์ราคา","เกณฑ์ราคาประกอบเกณฑ์อื่น"].index(st.session_state.proj_criteria),
+            horizontal=True,
+            key="inp_criteria"
+        )
+        st.session_state.proj_criteria = p_criteria
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════
+# 9. STEP 2 — SPEC EXTRACTION
+# ══════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="sec-header">
+  <div class="sec-number">2</div>
+  <p class="sec-title">สกัดสเปคอ้างอิง &amp; คัดกรองความโปร่งใส</p>
+</div>""", unsafe_allow_html=True)
+
+st.markdown('<div class="card">', unsafe_allow_html=True)
+job_desc = st.text_area(
+    "วัตถุประสงค์ / ลักษณะงานที่ต้องการ",
+    placeholder="อธิบายเป้าหมายการใช้งานจริง เช่น จัดซื้อคอมพิวเตอร์ตั้งโต๊ะสำหรับงานธุรการ จำนวน 10 เครื่อง...",
+    height=90, key="inp_jobdesc"
+)
+
+cf1, cf2 = st.columns([3, 1])
+with cf1:
+    uploaded_files = st.file_uploader(
+        "อัปโหลดไฟล์ PDF สเปคจากผู้ค้า (เลือกได้หลายไฟล์)",
+        type=["pdf"], accept_multiple_files=True, label_visibility="visible"
+    )
+with cf2:
+    st.write("")  # spacer
     st.write("")
-    check_confirmation = st.checkbox("ข้าพเจ้ายืนยันว่าได้ทำการตรวจสอบ/ลบรายชื่อแบรนด์ที่ตกค้างเสร็จสิ้นแล้ว และต้องการให้ Gemini เริ่มสกัดสเปค")
-    
-    if st.button("🚀 ส่งข้อมูลที่ผ่านการกรองแล้วไปสกัดสเปคด้วย Gemini แยกไฟล์", type="primary", use_container_width=True):
-        if not job_description_pdf: st.warning("⚠️ โปรดระบุวัตถุประสงค์ลักษณะงานก่อน")
-        elif not check_confirmation: st.error("⚠️ โปรดคลิกกล่องยืนยันการตรวจสอบความโปร่งใสด้านบนก่อนครับ")
+    do_clean = st.button("✂️ Regex คลีนข้อมูล", use_container_width=True, type="secondary")
+
+if do_clean:
+    if not uploaded_files:
+        st.markdown('<div class="warn-box">⚠️ กรุณาอัปโหลดไฟล์ PDF ก่อน</div>', unsafe_allow_html=True)
+    else:
+        st.session_state.pdf_pre_cleaned_texts = {}
+        with st.spinner("⚡ กำลัง Regex สกัดข้อมูล..."):
+            for f in uploaded_files:
+                raw = extract_text_from_pdf(f)
+                st.session_state.pdf_pre_cleaned_texts[f.name] = local_regex_cleaner(raw)
+        st.markdown(
+            f'<div class="success-box">✓ คลีนเสร็จ {len(uploaded_files)} ไฟล์ — ตรวจสอบและแก้ไขด้านล่าง</div>',
+            unsafe_allow_html=True
+        )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# แสดงกล่องแก้ไขแยกไฟล์
+if st.session_state.pdf_pre_cleaned_texts:
+    st.markdown(
+        '<div class="info-box">💡 ตรวจสอบและลบชื่อบริษัท/แบรนด์ที่อาจตกค้าง ก่อนส่ง Gemini</div>',
+        unsafe_allow_html=True
+    )
+    for fname, txt in list(st.session_state.pdf_pre_cleaned_texts.items()):
+        with st.expander(f"📁 {fname}", expanded=True):
+            edited = st.text_area(
+                "แก้ไขได้โดยตรง:", value=txt, height=160, key=f"verify_{fname}"
+            )
+            st.session_state.pdf_pre_cleaned_texts[fname] = edited
+
+    confirmed = st.checkbox("✅ ยืนยันว่าตรวจสอบ / ลบแบรนด์เสร็จสิ้นแล้ว")
+
+    if st.button("🚀 ส่ง Gemini สกัดสเปค → ซิงค์เข้าข้อ 4", type="primary", use_container_width=True):
+        if not job_desc.strip():
+            st.markdown('<div class="warn-box">⚠️ โปรดระบุวัตถุประสงค์ก่อน</div>', unsafe_allow_html=True)
+        elif not confirmed:
+            st.markdown('<div class="error-box">⚠️ กรุณายืนยันการตรวจสอบความโปร่งใสก่อน</div>', unsafe_allow_html=True)
+        elif not gemini_client:
+            st.markdown('<div class="error-box">❌ ไม่พบ Gemini API Key</div>', unsafe_allow_html=True)
         else:
-            final_summarized_list = []
-            progress_bar = st.progress(0)
-            
-            for idx, (file_name, verified_text) in enumerate(st.session_state.pdf_pre_cleaned_texts.items()):
-                st.toast(f"🤖 Gemini กำลังสกัดโครงสร้างข้อมูลไฟล์ที่ {idx+1}...")
-                single_summary = summarize_single_file_with_gemini(verified_text)
-                final_summarized_list.append(f"\n[ร่างสเปคกลางสกัดจากไฟล์ {idx+1}]:\n{single_summary}\n")
-                progress_bar.progress((idx + 1) / len(st.session_state.pdf_pre_cleaned_texts))
-                
-            with st.spinner("⚙️ กำลังนำสเปคทั้งหมดที่คัดกรองแล้ว ผนวกรวมเข้าสู่ข้อ 4 ของข้อกำหนด TOR..."):
+            summaries = []
+            prog = st.progress(0)
+            items = list(st.session_state.pdf_pre_cleaned_texts.items())
+            for idx, (fname, vtxt) in enumerate(items):
+                st.toast(f"🤖 Gemini สกัดไฟล์ {idx+1}/{len(items)}: {fname}")
+                s = summarize_single_file_with_gemini(vtxt)
+                summaries.append(f"\n[สเปคจากไฟล์ {idx+1} ({fname})]:\n{s}\n")
+                prog.progress((idx+1) / len(items))
+
+            with st.spinner("⚙️ รวมสเปคทั้งหมดเข้าข้อ 4..."):
                 try:
-                    all_merged_specs = "".join(final_summarized_list)
-                    prompt_merge = f"สรุปและเรียบเรียงข้อกำหนดคุณลักษณะเฉพาะทางเทคนิคเพื่อใส่ใน TOR ข้อ 4 วัตถุประสงค์คือ {job_description_pdf} ข้อมูลสเปคทั้งหมดคือ: {all_merged_specs} เขียนแบ่งหมวดหมู่ย่อย 4.1, 4.2 อย่างเป็นระเบียบ ห้ามมีชื่อคู่ค้าหรือแบรนด์ใดๆ หลงเหลือ"
-                    
-                    response = call_gemini_with_retry(gemini_client.models.generate_content, model=GEMINI_MODEL, contents=prompt_merge)
-                    
-                    # ✅ จุดแก้ไขที่ 2: แก้ไขโครงสร้างการดึงข้อความจุดรวมร่างข้อ 4 (บรรทัด 303 เดิม) เพื่อกันแอปแครช
-                    final_text = ""
-                    if hasattr(response, 'text') and response.text:
-                        final_text = response.text
-                    elif hasattr(response, 'candidates') and response.candidates:
-                        final_text = response.candidates[0].content.parts[0].text
-                        
+                    merged = "".join(summaries)
+                    prompt_merge = (
+                        f"สรุปและเรียบเรียงข้อกำหนดคุณลักษณะเฉพาะทางเทคนิคเพื่อใส่ใน TOR ข้อ 4 "
+                        f"วัตถุประสงค์: {job_desc} "
+                        f"ข้อมูลสเปค: {merged} "
+                        "แบ่งหมวดย่อย 4.1, 4.2 ห้ามมีชื่อคู่ค้าหรือแบรนด์ใดๆ"
+                    )
+                    resp = call_gemini_with_retry(
+                        gemini_client.models.generate_content,
+                        model=GEMINI_MODEL, contents=prompt_merge
+                    )
+                    final_text = _extract_gemini_text(resp)
                     st.session_state.ai_drafted_spec_v4 = final_text
                     st.session_state.tor_sections[4] = final_text
-                    st.success("🎉 ซิงค์สเปคที่สกัดแบบประหยัด Token เข้าสู่ร่างข้อ 4 เรียบร้อยแล้ว! พี่สามารถเลื่อนลงไปดูได้ที่ข้อ 4 ด้านล่างครับ")
+                    st.markdown('<div class="success-box">🎉 ซิงค์สเปคเข้าข้อ 4 เรียบร้อย! เลื่อนลงดูข้อ 4 ด้านล่าง</div>', unsafe_allow_html=True)
                     st.rerun()
-                except Exception as e: 
-                    st.error(f"เกิดข้อผิดพลาดในการรวบรวมเนื้อหา: {e}")
+                except Exception as e:
+                    st.markdown(f'<div class="error-box">❌ {e}</div>', unsafe_allow_html=True)
 
-# 📝 ส่วนที่ 3: ใช้ Typhoon ร่างเนื้อหา 10 ข้อหลัก
-st.markdown("## 3. จัดการขอบเขตงาน TOR 10 ข้อหลัก")
-if p_name: st.caption(f"📍 โครงการปัจจุบัน: **{p_name}** | งบประมาณ: **{p_budget:,} บาท**")
+# ══════════════════════════════════════════════════════════════════
+# 10. STEP 3 — TOR 10 SECTIONS
+# ══════════════════════════════════════════════════════════════════
+st.markdown("""
+<div class="sec-header">
+  <div class="sec-number">3</div>
+  <p class="sec-title">ร่างขอบเขตงาน TOR 10 ข้อหลัก</p>
+</div>""", unsafe_allow_html=True)
 
-for i in range(1, 11):
-    with st.expander(f"📌 ข้อ {i}: {TOR_TITLES[i]}", expanded=(i==4)):
-        # 1. ใช้ text_area เดียวที่ผูกกับ session_state และ on_change
-        st.text_area(
-            "เนื้อหา:", 
-            value=st.session_state.tor_sections[i], 
-            height=160, 
-            key=f"area_{i}",
-            on_change=lambda i=i: st.session_state.tor_sections.update({i: st.session_state[f"area_{i}"]}),
-            label_visibility="collapsed"
+is_busy = st.session_state.generating_section is not None
+
+if p_name:
+    st.markdown(
+        f'<div class="info-box" style="margin-bottom:16px;">📍 <strong>{p_name}</strong> &nbsp;|&nbsp; '
+        f'งบประมาณ <strong>{p_budget:,} บาท</strong> &nbsp;|&nbsp; {p_criteria}</div>',
+        unsafe_allow_html=True
+    )
+
+# แสดง progress bar เมื่อ gen all
+total_queue_len = len(st.session_state.generate_all_queue) + (1 if is_busy else 0)
+if is_busy:
+    # คำนวณ progress จาก queue ที่เหลือ
+    gen_sec = st.session_state.generating_section
+    queue_remaining = len(st.session_state.generate_all_queue)
+    # แสดง banner
+    col_info, col_cancel = st.columns([4, 1])
+    with col_info:
+        st.markdown(
+            f'<div class="warn-box" style="margin:0;">⚡ กำลังร่างข้อ <strong>{gen_sec}</strong>: {TOR_TITLES[gen_sec]}'
+            + (f' &nbsp;|&nbsp; เหลือในคิว: {queue_remaining} ข้อ' if queue_remaining else '') +
+            '</div>', unsafe_allow_html=True
         )
-        
-        # 2. ส่วนแจ้งเตือนข้อ 4
-        if i == 4 and st.session_state.ai_drafted_spec_v4:
-            st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคแล้ว</small>", unsafe_allow_html=True)
-            
-        # 3. ปุ่มกดรีเจน
-        if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"btn_{i}"):
-            if not p_name:
-                st.error("กรุณาระบุชื่อโครงการก่อน")
-            else:
-                spec_prompt = f"จงเขียนร่างข้อกำหนดขอบเขตงาน TOR โครงการ '{p_name}' ข้อ {i} หัวข้อ: {TOR_TITLES[i]} ภาษาราชการ งบประมาณ {p_budget} บาท"
-                generate_typhoon_stream(spec_prompt, i)
+    with col_cancel:
+        # FIX: ปุ่ม Cancel ที่ใช้งานได้จริง
+        if st.button("⛔ ยกเลิก", key="btn_cancel", use_container_width=True):
+            st.session_state.generating_section = None
+            st.session_state.generate_all_queue = []
+            st.session_state.gen_error = None
+            st.rerun()
 
 st.write("")
-if st.button("✨ ให้ Typhoon เริ่มร่างข้อกำหนดส่วนที่เหลือพร้อมกันทั้งหมด", type="primary", use_container_width=True):
-    if not p_name: st.error("⚠️ กรุณาระบุชื่อโครงการที่ด้านบนสุดก่อนรันงาน")
-    else:
-        st.session_state.meta_data = {"title": p_name, "agency": p_agency, "type": "ซื้อ/จ้างทั่วไป", "budget": p_budget, "criteria": p_criteria}
-        for i in range(1, 11):
-            if i == 4 and st.session_state.tor_sections[4]: continue
-            st.toast(f"Typhoon กำลังร่างเรียบเรียงข้อ {i}...")
-            box_placeholder = st.empty()
-            proj_context = f"โครงการ: {p_name}, หน่วยงาน: {p_agency}, งบประมาณ: {p_budget} บาท, เกณฑ์พิจารณา: {p_criteria}"
-            specific_prompt = f"จงเขียนเนื้อหาของขอบเขตของงาน (TOR) ตามมาตรฐานราชการไทย ว.159 เฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ของ{proj_context} อธิบายรายละเอียดเชิงระเบียบพัสดุให้ครบถ้วนและสละสลวยที่สุด"
-            generate_typhoon_stream(specific_prompt, i)
-            time.sleep(2.0)
-        st.balloons()
 
-# ── 5. EXPORT HUB (ศูนย์ดาวน์โหลด 3 รูปแบบ) ───────────────────────
-if st.session_state.tor_sections[1] or st.session_state.tor_sections[4]:
+# แสดง error จาก generate ก่อนหน้า (ถ้ามี)
+if st.session_state.gen_error:
+    st.markdown(
+        f'<div class="error-box">⚠️ การร่างข้อก่อนหน้าล้มเหลว: {st.session_state.gen_error} — คิวถูกหยุดแล้ว</div>',
+        unsafe_allow_html=True
+    )
+
+# ── render 10 ข้อ ─────────────────────────────────────────────────
+for i in range(1, 11):
+    is_gen_this = (st.session_state.generating_section == i)
+    has_content = bool(st.session_state.tor_sections[i].strip())
+
+    # card class
+    card_cls = "tor-card generating" if is_gen_this else ("tor-card done" if has_content else "tor-card")
+    num_cls  = "tor-num done-num" if has_content else "tor-num"
+    status_html = ""
+    if is_gen_this:
+        status_html = '<span class="status-gen">⚡ กำลังร่าง</span>'
+    elif has_content:
+        status_html = '<span class="status-done">✓ มีเนื้อหา</span>'
+
+    st.markdown(f"""
+    <div class="{card_cls}">
+      <div class="tor-card-header">
+        <div class="{num_cls}">{i:02d}</div>
+        <div class="tor-title-text">ข้อ {i} &nbsp;{TOR_TITLES[i]}</div>
+        {status_html}
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+    # content area (expand)
+    with st.expander("", expanded=is_gen_this or (i == 4 and has_content)):
+
+        if is_gen_this:
+            stream_box = st.empty()
+            stream_box.markdown('<div class="stream-container">_⚡ กำลังร่างเนื้อหา..._</div>', unsafe_allow_html=True)
+
+            proj_ctx = (
+                f"โครงการ: {p_name}, หน่วยงาน: {p_agency}, "
+                f"งบประมาณ: {p_budget:,} บาท, เกณฑ์: {p_criteria}"
+            )
+            prompt = (
+                f"จงเขียนเนื้อหาของขอบเขตของงาน (TOR) ตามมาตรฐานราชการไทย ว.159 "
+                f"เฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ของ{proj_ctx} "
+                "อธิบายรายละเอียดเชิงระเบียบพัสดุให้ครบถ้วนและสละสลวย"
+            )
+            generate_typhoon_section(i, prompt, stream_box)
+
+            # FIX: หยุดคิวถ้าเกิด error
+            if st.session_state.gen_error:
+                st.session_state.generating_section = None
+                st.session_state.generate_all_queue = []
+            else:
+                st.session_state.generating_section = None
+                if st.session_state.generate_all_queue:
+                    next_sec = st.session_state.generate_all_queue.pop(0)
+                    st.session_state.generating_section = next_sec
+
+            st.rerun()
+
+        else:
+            # text_area ปกติ — ใช้ on_change ที่ pre-built แล้ว
+            st.text_area(
+                label="เนื้อหา",
+                value=st.session_state.tor_sections[i],
+                height=200,
+                key=f"ta_{i}",
+                on_change=_ON_CHANGE[i],
+                label_visibility="collapsed"
+            )
+
+            if i == 4 and st.session_state.ai_drafted_spec_v4:
+                st.markdown(
+                    '<small style="color:#34D399;font-weight:600;">✓ ซิงค์สเปค Gemini แล้ว</small>',
+                    unsafe_allow_html=True
+                )
+
+            col_btn, _ = st.columns([1, 3])
+            with col_btn:
+                if st.button(
+                    f"🔄 รีเจนข้อ {i}", key=f"btn_regen_{i}",
+                    disabled=is_busy, type="secondary"
+                ):
+                    if not p_name:
+                        st.markdown('<div class="error-box">กรุณาระบุชื่อโครงการก่อน</div>', unsafe_allow_html=True)
+                    else:
+                        st.session_state.gen_error = None
+                        st.session_state.generating_section = i
+                        st.rerun()
+
+st.write("")
+
+# ── ปุ่มรันทั้งหมด ────────────────────────────────────────────────
+col_run, col_clear = st.columns([3, 1])
+with col_run:
+    if st.button(
+        "✨ ให้ Typhoon ร่างทุกข้อที่ยังว่างพร้อมกัน",
+        type="primary", use_container_width=True, disabled=is_busy
+    ):
+        if not p_name:
+            st.markdown('<div class="error-box">⚠️ กรุณาระบุชื่อโครงการก่อน</div>', unsafe_allow_html=True)
+        else:
+            st.session_state.meta_data = {
+                "title": p_name, "agency": p_agency,
+                "budget": p_budget, "criteria": p_criteria
+            }
+            queue = [i for i in range(1, 11) if not st.session_state.tor_sections[i].strip()]
+            if not queue:
+                st.markdown(
+                    '<div class="info-box">ทุกข้อมีเนื้อหาแล้ว หากต้องการ re-gen ให้กด "ล้างทั้งหมด" ก่อน</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                st.session_state.gen_error = None
+                first = queue.pop(0)
+                st.session_state.generate_all_queue = queue
+                st.session_state.generating_section = first
+                st.rerun()
+
+with col_clear:
+    if st.button("🗑️ ล้างทั้งหมด", use_container_width=True, disabled=is_busy, type="secondary"):
+        st.session_state.tor_sections = {i: "" for i in range(1, 11)}
+        st.session_state.ai_drafted_spec_v4 = ""
+        st.session_state.gen_error = None
+        st.rerun()
+
+# ══════════════════════════════════════════════════════════════════
+# 11. EXPORT HUB
+# ══════════════════════════════════════════════════════════════════
+has_any = any(st.session_state.tor_sections[i].strip() for i in range(1, 11))
+if has_any:
     if not st.session_state.meta_data:
-        st.session_state.meta_data = {"title": p_name or "ไม่ได้ระบุชื่อ", "agency": p_agency, "budget": p_budget, "criteria": p_criteria}
-        
-    st.markdown("<div class='export-box'>", unsafe_allow_html=True)
-    st.markdown("### 📥 ศูนย์ส่งออกเอกสาร TOR (Export Hub)")
-    st.caption("เลือกดาวน์โหลดไฟล์ขอบเขตงานในรูปแบบที่ต้องการไปใช้งานต่อ")
-    
-    all_text_export = f"ร่างขอบเขตของงาน (TOR) - {st.session_state.meta_data['title']}\n\n"
-    for idx, ct in st.session_state.tor_sections.items():
-        all_text_export += f"ข้อ {idx} {TOR_TITLES[idx]}\n{ct}\n\n"
-        
+        st.session_state.meta_data = {
+            "title": p_name or "ไม่ได้ระบุ", "agency": p_agency,
+            "budget": p_budget, "criteria": p_criteria
+        }
+
+    st.markdown('<div class="export-section">', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+      <span style="font-size:1.4rem;">📥</span>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:#F0F6FF;">ส่งออกเอกสาร TOR</div>
+        <div style="font-size:0.8rem;color:#7FA8CC;">เลือกรูปแบบที่ต้องการดาวน์โหลด</div>
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+    all_txt = f"ร่างขอบเขตของงาน (TOR) — {st.session_state.meta_data.get('title','')}\n\n"
+    for idx in range(1, 11):
+        all_txt += f"ข้อ {idx} {TOR_TITLES[idx]}\n{st.session_state.tor_sections.get(idx,'')}\n\n"
+
     word_bytes = build_word_document()
-    html_printable = build_pdf_html_document()
-    
-    dl_col1, dl_col2, dl_col3 = st.columns(3)
-    
-    with dl_col1:
+    html_bytes = build_html_document()
+    fname_base = p_name.replace(" ", "_") if p_name else "TOR_Project"
+
+    dc1, dc2, dc3 = st.columns(3)
+    with dc1:
         st.download_button(
-            label="📝 ดาวน์โหลดไฟล์ Word (.DOCX)",
+            "📝 Word Document (.DOCX)\nฟอนต์ไทยครบถ้วน",
             data=word_bytes,
-            file_name=f"TOR_{p_name or 'Project'}.docx",
+            file_name=f"{fname_base}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True
         )
-    with dl_col2:
+    with dc2:
         st.download_button(
-            label="📄 ดาวน์โหลดไฟล์ข้อความ (.TXT)",
-            data=all_text_export,
-            file_name=f"TOR_{p_name or 'Project'}.txt",
+            "📄 ข้อความธรรมดา (.TXT)\nเปิดได้ทุก Editor",
+            data=all_txt,
+            file_name=f"{fname_base}.txt",
             mime="text/plain",
             use_container_width=True
         )
-    with dl_col3:
+    with dc3:
         st.download_button(
-            label="🖨️ เปิดพิมพ์ / บันทึกเป็น PDF",
-            data=html_printable,
-            file_name=f"TOR_Print_Preview_{p_name or 'Project'}.html",
+            "🖨️ พิมพ์เป็น PDF (.HTML)\nCtrl+P → Save as PDF",
+            data=html_bytes,
+            file_name=f"{fname_base}_Print.html",
             mime="text/html",
             use_container_width=True,
-            help="ดาวน์โหลดไฟล์พรีวิวนี้แล้วเปิดใน Chrome/Edge จากนั้นกด Ctrl+P เพื่อบันทึกเป็น PDF ที่ฟอนต์ไม่พังครับ"
+            help="เปิดในเบราว์เซอร์แล้วกด Ctrl+P เพื่อบันทึกเป็น PDF"
         )
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
