@@ -929,6 +929,8 @@ if st.session_state.pdf_pre_cleaned_texts:
                     final_text = _extract_gemini_text(resp)
                     st.session_state.ai_drafted_spec_v4 = final_text
                     st.session_state.tor_sections[4] = final_text
+                    if "ta_4" in st.session_state:
+                        del st.session_state["ta_4"]
                     st.markdown('<div class="success-box">🎉 ซิงค์สเปคเข้าข้อ 4 เรียบร้อย!</div>', unsafe_allow_html=True)
                     st.rerun()
                 except Exception as e:
@@ -977,6 +979,8 @@ if is_busy:
             st.session_state.generating_section = None
             st.session_state.generate_all_queue = []
             st.session_state.gen_error = None
+            if f"ta_{i}" in st.session_state:
+                del st.session_state[f"ta_{i}"]
             st.rerun()
 
 st.write("")
