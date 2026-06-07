@@ -164,15 +164,18 @@ def generate_typhoon_stream(prompt_text, section_num, placeholder):
             temperature=0.4, stream=True
         )
         for chunk in response_stream:
-            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
+            # ใช้การตรวจสอบ attr ที่ปลอดภัยขึ้น
+            delta = chunk.choices[0].delta
+            if hasattr(delta, 'content') and delta.content:
+                full_response += delta.content
                 placeholder.code(full_response + "▌", language="text")
         
-        # อัปเดตข้อมูลลง session_state หลัก
+        # บันทึกข้อมูลที่เจนเสร็จลงใน state หลักที่ UI อ้างอิง
         st.session_state.tor_sections[section_num] = full_response
         placeholder.empty()
-        # สั่งรีเฟรชหน้าเพื่อให้ Text Area ดึงข้อมูลที่เพิ่งเจนเสร็จไปแสดงผล
-        st.rerun() 
+        
+        # สั่ง Rerun เพื่อให้ text_area แสดงเนื้อหาใหม่ทันที
+        st.rerun()
         return full_response
     except Exception as e: 
         st.error(f"Error: {e}")
@@ -312,6 +315,7 @@ if st.session_state.pdf_pre_cleaned_texts:
                     st.session_state.ai_drafted_spec_v4 = final_text
                     st.session_state.tor_sections[4] = final_text
                     st.success("🎉 ซิงค์สเปคที่สกัดแบบประหยัด Token เข้าสู่ร่างข้อ 4 เรียบร้อยแล้ว! พี่สามารถเลื่อนลงไปดูได้ที่ข้อ 4 ด้านล่างครับ")
+                    st.rerun()
                 except Exception as e: 
                     st.error(f"เกิดข้อผิดพลาดในการรวบรวมเนื้อหา: {e}")
 
