@@ -34,14 +34,29 @@ st.set_page_config(page_title="TOR Workspace", page_icon="🛡️", layout="wide
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ── Theme-aware CSS variables (รองรับ Streamlit light/dark) ── */
+:root {
+    --tor-surface:       var(--secondary-background-color);
+    --tor-bg:            var(--background-color);
+    --tor-text:          var(--text-color);
+    --tor-border:        rgba(128,128,128,0.18);
+    --tor-border-hover:  rgba(59,130,246,0.4);
+    --tor-accent:        #3B82F6;
+    --tor-accent-dim:    rgba(59,130,246,0.14);
+    --tor-muted:         rgba(128,128,128,0.75);
+    --tor-success:       #10B981;
+    --tor-warn:          #F59E0B;
+    --tor-error:         #EF4444;
+}
+
 /* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; }
 html, body, [class*="css"] {
     font-family: 'Noto Sans Thai', sans-serif !important;
 }
 .stApp {
-    background: #0F1623;
-    color: #E2E8F0;
+    background: var(--tor-bg);
+    color: var(--tor-text);
 }
 
 /* ── Hide default Streamlit chrome ── */
@@ -53,8 +68,8 @@ html, body, [class*="css"] {
 
 /* ── App Header ── */
 .app-header {
-    background: linear-gradient(135deg, #1a2744 0%, #162035 100%);
-    border: 1px solid rgba(99,179,237,0.15);
+    background: var(--tor-surface);
+    border: 1px solid var(--tor-border);
     border-radius: 16px;
     padding: 28px 36px;
     margin-bottom: 32px;
@@ -66,27 +81,27 @@ html, body, [class*="css"] {
     position: absolute;
     top: 0; right: 0;
     width: 300px; height: 100%;
-    background: radial-gradient(ellipse at right center, rgba(59,130,246,0.12) 0%, transparent 70%);
+    background: radial-gradient(ellipse at right center, var(--tor-accent-dim) 0%, transparent 70%);
     pointer-events: none;
 }
 .app-header-title {
     font-size: 1.6rem;
     font-weight: 700;
-    color: #F0F6FF;
+    color: var(--tor-text);
     margin: 0 0 6px;
     letter-spacing: -0.3px;
 }
 .app-header-sub {
     font-size: 0.85rem;
-    color: #7FA8CC;
+    color: var(--tor-muted);
     margin: 0;
     display: flex;
     align-items: center;
     gap: 16px;
 }
 .badge {
-    background: rgba(59,130,246,0.18);
-    color: #93C5FD;
+    background: var(--tor-accent-dim);
+    color: var(--tor-accent);
     border: 1px solid rgba(59,130,246,0.3);
     border-radius: 20px;
     padding: 2px 10px;
@@ -118,14 +133,14 @@ html, body, [class*="css"] {
 .sec-title {
     font-size: 1.05rem;
     font-weight: 600;
-    color: #CBD5E1;
+    color: var(--tor-text);
     margin: 0;
 }
 
 /* ── Cards ── */
 .card {
-    background: #1A2235;
-    border: 1px solid rgba(255,255,255,0.07);
+    background: var(--tor-surface);
+    border: 1px solid var(--tor-border);
     border-radius: 12px;
     padding: 24px;
     margin-bottom: 16px;
@@ -136,7 +151,7 @@ html, body, [class*="css"] {
 .stTextInput > label, .stTextArea > label,
 .stNumberInput > label, .stRadio > label,
 .stFileUploader > label {
-    color: #94A3B8 !important;
+    color: var(--tor-muted) !important;
     font-size: 0.82rem !important;
     font-weight: 500 !important;
     letter-spacing: 0.3px !important;
@@ -144,25 +159,24 @@ html, body, [class*="css"] {
     margin-bottom: 6px !important;
 }
 .stTextInput input, .stNumberInput input {
-    background: #0F1623 !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: var(--tor-bg) !important;
+    border: 1px solid var(--tor-border) !important;
     border-radius: 8px !important;
-    color: #E2E8F0 !important;
+    color: var(--tor-text) !important;
     font-family: 'Noto Sans Thai', sans-serif !important;
     font-size: 0.95rem !important;
     padding: 10px 14px !important;
     transition: border-color 0.2s, box-shadow 0.2s !important;
 }
 .stTextInput input:focus, .stNumberInput input:focus {
-    border-color: #3B82F6 !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.2) !important;
-    background: #0F1623 !important;
+    border-color: var(--tor-accent) !important;
+    box-shadow: 0 0 0 3px var(--tor-accent-dim) !important;
 }
 .stTextArea textarea {
-    background: #0F1623 !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: var(--tor-bg) !important;
+    border: 1px solid var(--tor-border) !important;
     border-radius: 8px !important;
-    color: #E2E8F0 !important;
+    color: var(--tor-text) !important;
     font-family: 'Noto Sans Thai', sans-serif !important;
     font-size: 0.93rem !important;
     line-height: 1.7 !important;
@@ -170,13 +184,16 @@ html, body, [class*="css"] {
     resize: vertical !important;
 }
 .stTextArea textarea:focus {
-    border-color: #3B82F6 !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.2) !important;
+    border-color: var(--tor-accent) !important;
+    box-shadow: 0 0 0 3px var(--tor-accent-dim) !important;
 }
 
 /* ── Radio ── */
 .stRadio > div { gap: 12px !important; }
-.stRadio [data-testid="stMarkdownContainer"] p { color: #CBD5E1 !important; font-size: 0.9rem !important; }
+.stRadio [data-testid="stMarkdownContainer"] p {
+    color: var(--tor-text) !important;
+    font-size: 0.9rem !important;
+}
 
 /* ── Buttons ── */
 .stButton > button {
@@ -198,14 +215,13 @@ html, body, [class*="css"] {
     box-shadow: 0 6px 20px rgba(37,99,235,0.45) !important;
 }
 .stButton > button[kind="secondary"] {
-    background: rgba(255,255,255,0.05) !important;
-    color: #94A3B8 !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: var(--tor-surface) !important;
+    color: var(--tor-muted) !important;
+    border: 1px solid var(--tor-border) !important;
 }
 .stButton > button[kind="secondary"]:hover {
-    background: rgba(255,255,255,0.09) !important;
-    color: #E2E8F0 !important;
-    border-color: rgba(255,255,255,0.2) !important;
+    border-color: var(--tor-border-hover) !important;
+    color: var(--tor-text) !important;
 }
 .stButton > button:disabled {
     opacity: 0.4 !important;
@@ -215,19 +231,19 @@ html, body, [class*="css"] {
 
 /* ── TOR Section Cards ── */
 .tor-card {
-    background: #1A2235;
-    border: 1px solid rgba(255,255,255,0.07);
+    background: var(--tor-surface);
+    border: 1px solid var(--tor-border);
     border-radius: 12px;
     margin-bottom: 12px;
     overflow: hidden;
     transition: border-color 0.2s;
 }
-.tor-card:hover { border-color: rgba(59,130,246,0.25); }
+.tor-card:hover { border-color: var(--tor-border-hover); }
 .tor-card.generating {
-    border-color: rgba(59,130,246,0.5);
-    box-shadow: 0 0 0 1px rgba(59,130,246,0.2), 0 4px 24px rgba(59,130,246,0.12);
+    border-color: var(--tor-accent);
+    box-shadow: 0 0 0 1px var(--tor-accent-dim), 0 4px 24px var(--tor-accent-dim);
 }
-.tor-card.done { border-color: rgba(16,185,129,0.3); }
+.tor-card.done { border-color: rgba(16,185,129,0.35); }
 
 .tor-card-header {
     padding: 14px 20px;
@@ -239,8 +255,8 @@ html, body, [class*="css"] {
 }
 .tor-num {
     width: 26px; height: 26px;
-    background: rgba(37,99,235,0.2);
-    color: #60A5FA;
+    background: var(--tor-accent-dim);
+    color: var(--tor-accent);
     border-radius: 6px;
     font-size: 0.78rem;
     font-weight: 700;
@@ -249,20 +265,20 @@ html, body, [class*="css"] {
     flex-shrink: 0;
 }
 .tor-num.done-num {
-    background: rgba(16,185,129,0.2);
-    color: #34D399;
+    background: rgba(16,185,129,0.18);
+    color: #10B981;
 }
 .tor-title-text {
     font-size: 0.9rem;
     font-weight: 600;
-    color: #CBD5E1;
+    color: var(--tor-text);
     flex: 1;
 }
 
 /* ── Status Badges ── */
 .status-gen {
     background: rgba(245,158,11,0.15);
-    color: #FCD34D;
+    color: #D97706;
     border: 1px solid rgba(245,158,11,0.3);
     border-radius: 6px;
     padding: 2px 9px;
@@ -273,7 +289,7 @@ html, body, [class*="css"] {
 }
 .status-done {
     background: rgba(16,185,129,0.12);
-    color: #34D399;
+    color: #059669;
     border: 1px solid rgba(16,185,129,0.3);
     border-radius: 6px;
     padding: 2px 9px;
@@ -287,38 +303,38 @@ html, body, [class*="css"] {
 
 /* ── Alert / Info boxes ── */
 .info-box {
-    background: rgba(59,130,246,0.1);
-    border: 1px solid rgba(59,130,246,0.25);
+    background: var(--tor-accent-dim);
+    border: 1px solid rgba(59,130,246,0.28);
     border-radius: 8px;
     padding: 12px 16px;
-    color: #93C5FD;
+    color: var(--tor-accent);
     font-size: 0.88rem;
     margin: 12px 0;
 }
 .warn-box {
     background: rgba(245,158,11,0.1);
-    border: 1px solid rgba(245,158,11,0.25);
+    border: 1px solid rgba(245,158,11,0.28);
     border-radius: 8px;
     padding: 12px 16px;
-    color: #FCD34D;
+    color: #B45309;
     font-size: 0.88rem;
     margin: 12px 0;
 }
 .success-box {
     background: rgba(16,185,129,0.1);
-    border: 1px solid rgba(16,185,129,0.25);
+    border: 1px solid rgba(16,185,129,0.28);
     border-radius: 8px;
     padding: 12px 16px;
-    color: #34D399;
+    color: #047857;
     font-size: 0.88rem;
     margin: 12px 0;
 }
 .error-box {
     background: rgba(239,68,68,0.1);
-    border: 1px solid rgba(239,68,68,0.25);
+    border: 1px solid rgba(239,68,68,0.28);
     border-radius: 8px;
     padding: 12px 16px;
-    color: #FCA5A5;
+    color: #B91C1C;
     font-size: 0.88rem;
     margin: 12px 0;
 }
@@ -329,40 +345,40 @@ html, body, [class*="css"] {
     border-radius: 99px !important;
 }
 .stProgress > div > div {
-    background: rgba(255,255,255,0.07) !important;
+    background: var(--tor-border) !important;
     border-radius: 99px !important;
 }
 
 /* ── File uploader ── */
 [data-testid="stFileUploader"] {
-    background: rgba(255,255,255,0.03) !important;
-    border: 1.5px dashed rgba(255,255,255,0.12) !important;
+    background: var(--tor-surface) !important;
+    border: 1.5px dashed var(--tor-border) !important;
     border-radius: 10px !important;
     padding: 8px !important;
     transition: border-color 0.2s !important;
 }
 [data-testid="stFileUploader"]:hover {
-    border-color: rgba(59,130,246,0.4) !important;
+    border-color: var(--tor-border-hover) !important;
 }
 
-/* ── Expander (used in PDF review) ── */
+/* ── Expander ── */
 .streamlit-expanderHeader {
-    background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(255,255,255,0.08) !important;
+    background: var(--tor-surface) !important;
+    border: 1px solid var(--tor-border) !important;
     border-radius: 8px !important;
-    color: #CBD5E1 !important;
+    color: var(--tor-text) !important;
     font-weight: 600 !important;
     font-size: 0.88rem !important;
 }
 
 /* ── Checkbox ── */
-.stCheckbox label { color: #94A3B8 !important; font-size: 0.88rem !important; }
+.stCheckbox label { color: var(--tor-muted) !important; font-size: 0.88rem !important; }
 
 /* ── Download buttons ── */
 .stDownloadButton > button {
-    background: rgba(255,255,255,0.05) !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
-    color: #CBD5E1 !important;
+    background: var(--tor-surface) !important;
+    border: 1px solid var(--tor-border) !important;
+    color: var(--tor-text) !important;
     border-radius: 10px !important;
     font-family: 'Noto Sans Thai', sans-serif !important;
     font-size: 0.88rem !important;
@@ -372,50 +388,61 @@ html, body, [class*="css"] {
     transition: all 0.18s !important;
 }
 .stDownloadButton > button:hover {
-    background: rgba(59,130,246,0.15) !important;
-    border-color: rgba(59,130,246,0.4) !important;
-    color: #93C5FD !important;
+    background: var(--tor-accent-dim) !important;
+    border-color: var(--tor-border-hover) !important;
+    color: var(--tor-accent) !important;
     transform: translateY(-1px) !important;
 }
 
 /* ── Export section ── */
 .export-section {
-    background: linear-gradient(135deg, #1a2744 0%, #162035 100%);
-    border: 1px solid rgba(99,179,237,0.15);
+    background: var(--tor-surface);
+    border: 1px solid var(--tor-border);
     border-radius: 16px;
     padding: 28px;
     margin-top: 36px;
 }
 
+/* ── Export heading text ── */
+.export-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--tor-text);
+}
+.export-sub {
+    font-size: 0.8rem;
+    color: var(--tor-muted);
+}
+
 /* ── Divider ── */
-hr { border-color: rgba(255,255,255,0.07) !important; margin: 28px 0 !important; }
+hr { border-color: var(--tor-border) !important; margin: 28px 0 !important; }
 
 /* ── Spinner ── */
-.stSpinner > div { border-top-color: #3B82F6 !important; }
+.stSpinner > div { border-top-color: var(--tor-accent) !important; }
 
 /* ── Toast ── */
 [data-testid="stToast"] {
-    background: #1A2235 !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-    color: #E2E8F0 !important;
+    background: var(--tor-surface) !important;
+    border: 1px solid var(--tor-border) !important;
+    color: var(--tor-text) !important;
     border-radius: 10px !important;
 }
 
 /* ── Streaming text container ── */
 .stream-container {
-    background: #0F1623;
+    background: var(--tor-bg);
     border: 1px solid rgba(59,130,246,0.3);
     border-radius: 8px;
     padding: 16px;
     min-height: 80px;
     font-size: 0.92rem;
     line-height: 1.8;
-    color: #CBD5E1;
+    color: var(--tor-text);
 }
 
 /* ── Queue progress bar ── */
 .queue-track {
-    background: rgba(255,255,255,0.06);
+    background: var(--tor-border);
     border-radius: 4px;
     height: 4px;
     margin-top: 8px;
@@ -455,7 +482,6 @@ SYSTEM_PROMPT = (
     "ห้ามแปลเนื้อหาเป็นภาษาอังกฤษล้วน ให้ตอบเป็นภาษาไทยอย่างเป็นทางการเท่านั้น"
 )
 
-# แบรนด์ครอบคลุมสำหรับงาน IT/Office ราชการ
 IT_BRANDS = (
     r"Intel|AMD|NVIDIA|GeForce|Asus|Acer|HP|Dell|Lenovo|Apple|Microsoft|Cisco|Huawei|"
     r"Samsung|LG|Epson|Canon|Panasonic|Sony|Fujitsu|Brother|Xerox|Toshiba|Sharp|Ricoh|"
@@ -473,8 +499,8 @@ _DEFAULTS = {
     "ai_drafted_spec_v4":   "",
     "generating_section":   None,
     "generate_all_queue":   [],
-    "gen_error":            None,   # FIX: เก็บ error จาก generate เพื่อหยุดคิว
-    "proj_name":            "",     # FIX: persist form fields ใน state
+    "gen_error":            None,
+    "proj_name":            "",
     "proj_agency":          "",
     "proj_budget":          0,
     "proj_criteria":        "เกณฑ์ราคา",
@@ -486,8 +512,6 @@ for k, v in _DEFAULTS.items():
 # ══════════════════════════════════════════════════════════════════
 # 5. HELPERS
 # ══════════════════════════════════════════════════════════════════
-
-# FIX: retry ที่มี raise fallback ชัดเจน
 def call_gemini_with_retry(func, *args, **kwargs):
     last_exc = None
     for attempt in range(3):
@@ -499,7 +523,7 @@ def call_gemini_with_retry(func, *args, **kwargs):
                 import time; time.sleep(5 * (attempt + 1))
                 continue
             raise e
-    raise last_exc  # re-raise หลังครบ retry
+    raise last_exc
 
 def extract_text_from_pdf(uploaded_file):
     try:
@@ -516,7 +540,6 @@ def local_regex_cleaner(text):
     text = re.sub(r'(บริษัท\s+[^\s\n]+?\s+จำกัด(?:\s*\(มหาชน\))?)|(ห้างหุ้นส่วนจำกัด\s+[^\s\n]+)', "[COMPANY_HIDDEN]", text)
     en_co = r'\b[A-Za-z0-9\s\.,&\-\(\)]+?\s+(?:Co\s*\.?\s*,?\s*Ltd\s*\.?|Company\s+Limited|Inc\s*\.?|Corp\s*\.?|LLC|Group)\b'
     text = re.sub(en_co, "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
-    # FIX: ใช้ list แบรนด์ที่ครอบคลุมกว่าเดิม
     text = re.sub(IT_BRANDS, "[BRAND_HIDDEN]", text, flags=re.IGNORECASE)
     return text
 
@@ -544,7 +567,6 @@ def summarize_single_file_with_gemini(cleaned_text):
     except Exception as e:
         return f"[สกัดสเปคไม่สำเร็จ: {e}]\n\n{cleaned_text[:2000]}"
 
-# FIX: generate function — stream ลง placeholder, return full text, ไม่ rerun
 def generate_typhoon_section(section_num, prompt_text, stream_placeholder):
     if not typhoon_client:
         stream_placeholder.markdown('<div class="error-box">❌ ไม่พบ Typhoon API Key</div>', unsafe_allow_html=True)
@@ -581,10 +603,9 @@ def generate_typhoon_section(section_num, prompt_text, stream_placeholder):
             f'<div class="error-box">❌ เกิดข้อผิดพลาดในข้อ {section_num}: {err_msg}</div>',
             unsafe_allow_html=True
         )
-        st.session_state.gen_error = err_msg  # FIX: บันทึก error เพื่อหยุดคิว
+        st.session_state.gen_error = err_msg
         return ""
 
-# FIX: on_change callback factory สร้างครั้งเดียว
 def _make_on_change(idx):
     def _cb():
         st.session_state.tor_sections[idx] = st.session_state[f"ta_{idx}"]
@@ -597,7 +618,6 @@ _ON_CHANGE = {i: _make_on_change(i) for i in range(1, 11)}
 # ══════════════════════════════════════════════════════════════════
 def build_word_document():
     doc = Document()
-    # FIX: Set Thai-compatible font
     style = doc.styles['Normal']
     style.font.name = 'TH Sarabun New'
     style.font.size = Pt(14)
@@ -673,7 +693,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════
-# 8. STEP 1 — PROJECT INFO (persist ใน state)
+# 8. STEP 1 — PROJECT INFO
 # ══════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="sec-header">
@@ -685,7 +705,6 @@ with st.container():
     st.markdown('<div class="card">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
-        # FIX: ผูก widget กับ session_state โดยตรงเพื่อ persist ข้ามรอบ rerun
         p_name = st.text_input(
             "ชื่อโครงการ / งานจัดซื้อจัดจ้าง *",
             value=st.session_state.proj_name,
@@ -744,7 +763,7 @@ with cf1:
         type=["pdf"], accept_multiple_files=True, label_visibility="visible"
     )
 with cf2:
-    st.write("")  # spacer
+    st.write("")
     st.write("")
     do_clean = st.button("✂️ Regex คลีนข้อมูล", use_container_width=True, type="secondary")
 
@@ -764,7 +783,6 @@ if do_clean:
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# แสดงกล่องแก้ไขแยกไฟล์
 if st.session_state.pdf_pre_cleaned_texts:
     st.markdown(
         '<div class="info-box">💡 ตรวจสอบและลบชื่อบริษัท/แบรนด์ที่อาจตกค้าง ก่อนส่ง Gemini</div>',
@@ -835,13 +853,9 @@ if p_name:
         unsafe_allow_html=True
     )
 
-# แสดง progress bar เมื่อ gen all
-total_queue_len = len(st.session_state.generate_all_queue) + (1 if is_busy else 0)
 if is_busy:
-    # คำนวณ progress จาก queue ที่เหลือ
     gen_sec = st.session_state.generating_section
     queue_remaining = len(st.session_state.generate_all_queue)
-    # แสดง banner
     col_info, col_cancel = st.columns([4, 1])
     with col_info:
         st.markdown(
@@ -850,7 +864,6 @@ if is_busy:
             '</div>', unsafe_allow_html=True
         )
     with col_cancel:
-        # FIX: ปุ่ม Cancel ที่ใช้งานได้จริง
         if st.button("⛔ ยกเลิก", key="btn_cancel", use_container_width=True):
             st.session_state.generating_section = None
             st.session_state.generate_all_queue = []
@@ -859,7 +872,6 @@ if is_busy:
 
 st.write("")
 
-# แสดง error จาก generate ก่อนหน้า (ถ้ามี)
 if st.session_state.gen_error:
     st.markdown(
         f'<div class="error-box">⚠️ การร่างข้อก่อนหน้าล้มเหลว: {st.session_state.gen_error} — คิวถูกหยุดแล้ว</div>',
@@ -871,7 +883,6 @@ for i in range(1, 11):
     is_gen_this = (st.session_state.generating_section == i)
     has_content = bool(st.session_state.tor_sections[i].strip())
 
-    # card class
     card_cls = "tor-card generating" if is_gen_this else ("tor-card done" if has_content else "tor-card")
     num_cls  = "tor-num done-num" if has_content else "tor-num"
     status_html = ""
@@ -889,7 +900,6 @@ for i in range(1, 11):
       </div>
     </div>""", unsafe_allow_html=True)
 
-    # content area (expand)
     with st.expander("", expanded=is_gen_this or (i == 4 and has_content)):
 
         if is_gen_this:
@@ -907,7 +917,6 @@ for i in range(1, 11):
             )
             generate_typhoon_section(i, prompt, stream_box)
 
-            # FIX: หยุดคิวถ้าเกิด error
             if st.session_state.gen_error:
                 st.session_state.generating_section = None
                 st.session_state.generate_all_queue = []
@@ -920,7 +929,6 @@ for i in range(1, 11):
             st.rerun()
 
         else:
-            # text_area ปกติ — ใช้ on_change ที่ pre-built แล้ว
             st.text_area(
                 label="เนื้อหา",
                 value=st.session_state.tor_sections[i],
@@ -932,7 +940,7 @@ for i in range(1, 11):
 
             if i == 4 and st.session_state.ai_drafted_spec_v4:
                 st.markdown(
-                    '<small style="color:#34D399;font-weight:600;">✓ ซิงค์สเปค Gemini แล้ว</small>',
+                    '<small style="color:#059669;font-weight:600;">✓ ซิงค์สเปค Gemini แล้ว</small>',
                     unsafe_allow_html=True
                 )
 
@@ -1001,8 +1009,8 @@ if has_any:
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
       <span style="font-size:1.4rem;">📥</span>
       <div>
-        <div style="font-size:1rem;font-weight:700;color:#F0F6FF;">ส่งออกเอกสาร TOR</div>
-        <div style="font-size:0.8rem;color:#7FA8CC;">เลือกรูปแบบที่ต้องการดาวน์โหลด</div>
+        <div class="export-title">ส่งออกเอกสาร TOR</div>
+        <div class="export-sub">เลือกรูปแบบที่ต้องการดาวน์โหลด</div>
       </div>
     </div>""", unsafe_allow_html=True)
 
@@ -1017,27 +1025,29 @@ if has_any:
     dc1, dc2, dc3 = st.columns(3)
     with dc1:
         st.download_button(
-            "📝 Word Document (.DOCX)\nฟอนต์ไทยครบถ้วน",
+            "📝 Word Document (.DOCX)",
             data=word_bytes,
             file_name=f"{fname_base}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True
+            use_container_width=True,
+            help="ฟอนต์ไทยครบถ้วน พร้อมใช้งานทันที"
         )
     with dc2:
         st.download_button(
-            "📄 ข้อความธรรมดา (.TXT)\nเปิดได้ทุก Editor",
+            "📄 ข้อความธรรมดา (.TXT)",
             data=all_txt,
             file_name=f"{fname_base}.txt",
             mime="text/plain",
-            use_container_width=True
+            use_container_width=True,
+            help="เปิดได้ทุก Text Editor"
         )
     with dc3:
         st.download_button(
-            "🖨️ พิมพ์เป็น PDF (.HTML)\nCtrl+P → Save as PDF",
+            "🖨️ พิมพ์เป็น PDF (.HTML)",
             data=html_bytes,
             file_name=f"{fname_base}_Print.html",
             mime="text/html",
             use_container_width=True,
-            help="เปิดในเบราว์เซอร์แล้วกด Ctrl+P เพื่อบันทึกเป็น PDF"
+            help="เปิดในเบราว์เซอร์แล้วกด Ctrl+P → Save as PDF"
         )
     st.markdown('</div>', unsafe_allow_html=True)
