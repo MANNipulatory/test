@@ -9,16 +9,13 @@ from google.genai import types
 import pypdf
 
 # ── 1. CONFIGURATION & INITIALIZATION ────────────────────────────
-# ตรวจสอบและเชื่อมต่อ API Key ผ่านระบบ Secrets ของ Streamlit หลังบ้าน หรือ Environment Variable
 if "GEMINI_API_KEY" in st.secrets and st.secrets["GEMINI_API_KEY"]:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 elif os.environ.get("GEMINI_API_KEY"):
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 else:
-    # เผื่อกรณีกรอกในหน้าแอปชั่วคราว
     client = None
 
-# ใช้โมเดลยอดนิยม ประสิทธิภาพสูงและเร็วสตรีมข้อมูลได้ดี
 MODEL_NAME = "gemini-2.5-flash"
 
 st.set_page_config(
@@ -63,6 +60,9 @@ if "tor_sections" not in st.session_state:
     st.session_state.tor_sections = {i: "" for i in range(1, 11)}
 if "meta_data" not in st.session_state:
     st.session_state.meta_data = {}
+# สร้าง Session State สำหรับเก็บข้อความ PDF ที่สแกนและคัดกรองคำแล้ว
+if "pdf_censored_texts" not in st.session_state:
+    st.session_state.pdf_censored_texts = {}
 
 # ── 4. HELPER FUNCTIONS ──────────────────────────────────────────
 
@@ -78,18 +78,20 @@ def extract_text_from_pdf(uploaded_file):
         st.error(f"ไม่สามารถอ่านไฟล์ {uploaded_file.name} ได้: {e}")
         return ""
 
-def auto_censor_text(text, custom_company=None, custom_phone=None):
-    """ฟังก์ชันเซนเซอร์ข้อมูลติดต่อและชื่อบริษัทอัตโนมัติ (Data Anonymization)"""
+def auto_censor_text(text, custom_company="", custom_phone=""):
+    """ฟังก์ชันระบบคัดกรองอัตโนมัติรอบแรก (Regex)"""
     if not text:
         return ""
-    text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_NUMBER_HIDDEN]", text)
+    # ซ่อนเบอร์โทรศัพท์ อีเมล และ URL เว็บไซต์พื้นฐาน
+    text = re.sub(r'\b\d{2,3}-\d{3}-\d{4}\b|\b\d{2,3}-\d{4}-\d{4}\b|\b\d{9,10}\b', "[PHONE_HIDDEN]", text)
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', "[EMAIL_HIDDEN]", text)
-    text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[WEBSITE_HIDDEN]", text)
+    text = re.sub(r'https?://[^\s<>"]+|www\.[^\s<>"]+', "[URL_HIDDEN]", text)
     
+    # ซ่อนคำเฉพาะที่ผู้ใช้พิมพ์สั่งเพิ่มเติม (ถ้ามี)
     if custom_company and custom_company.strip():
-        text = re.sub(re.escape(custom_company.strip()), "[COMPANY_NAME_HIDDEN]", text, flags=re.IGNORECASE)
+        text = re.sub(re.escape(custom_company.strip()), "[COMPANY_HIDDEN]", text, flags=re.IGNORECASE)
     if custom_phone and custom_phone.strip():
-        text = text.replace(custom_phone.strip(), "[PHONE_NUMBER_HIDDEN]")
+        text = text.replace(custom_phone.strip(), "[PHONE_HIDDEN]")
         
     return text
 
@@ -101,7 +103,6 @@ def generate_section_stream(prompt_text, section_num, placeholder):
     
     full_response = ""
     try:
-        # ใช้ลูกเล่น Generate แบบ Stream ของ SDK ใหม่กลุ่ม genai.Client
         response_stream = client.models.generate_content_stream(
             model=MODEL_NAME,
             contents=prompt_text,
@@ -222,8 +223,8 @@ def create_docx(title, agency, project_type, budget, criteria, sections):
     return buf
 
 # ── 5. STREAMLIT NATIVE UI ───────────────────────────────────────
-st.title("🛡️ ระบบ AI บริหารจัดการเอกสาร TOR และวิเคราะห์สเปคกลาง (Gemini Version)")
-st.caption("ระบบรวมฟังก์ชันการจัดทำ TOR 10 ข้อหลัก (ว.159), ตรวจจับใบเสนอราคาคัดลอกแบรนด์ออก และเซนเซอร์ข้อมูลความลับ")
+st.title("🛡️ ระบบ AI บริหารจัดการเอกสาร TOR และวิเคราะห์สเปคกลาง")
+st.caption("ระบบรวมฟังก์ชันการจัดทำ TOR 10 ข้อหลัก (ว.159) และตรวจเทียบใบเสนอราคาเพื่อทำร่างสเปคกลาง")
 
 # ส่วนแสดงสถานะ API Key ด้านขวาบน
 status_col1, status_col2 = st.columns([4, 1])
@@ -233,15 +234,13 @@ with status_col2:
     else:
         st.error("🔴 Disconnected (No Key)")
 
-# แท็บการทำงานแยกหมวดหมู่ชัดเจน
-tab_gen, tab_pdf_analyze, tab_censor_tool, tab_setup_info = st.tabs([
+tab_gen, tab_pdf_analyze, tab_setup_info = st.tabs([
     "📝 1. เจนโครงร่าง 10 หัวข้อ (ว.159)", 
     "📊 2. วิเคราะห์เปรียบเทียบ PDF สเปคกลาง", 
-    "✂️ 3. เครื่องมือแอบตัด/เซนเซอร์ข้อมูลความลับ", 
     "⚙️ ตั้งค่าระบบ & ข้อมูล ว.159"
 ])
 
-# ── แท็บที่ 1: GENERATOR (ว.159 ดั้งเดิมของคุณ ปรับเป็น Gemini) ───────────
+# ── แท็บที่ 1: GENERATOR (ว.159) ───────────────────────────────────
 with tab_gen:
     if not client:
         st.warning("⚠️ ยังไม่ได้เชื่อมต่อระบบ — กรุณาตั้งค่า API Key ในแท็บขวาสุดเพื่อเปิดใช้งานระบบ AI")
@@ -301,7 +300,6 @@ with tab_gen:
                 generate_section_stream(specific_prompt, i, box_placeholder)
             st.balloons()
 
-    # แสดงผลลัพธ์โครงร่าง
     if st.session_state.meta_data:
         st.divider()
         st.subheader("📊 สรุปผลลัพธ์โครงร่างเอกสาร TOR (ว.159)")
@@ -354,16 +352,24 @@ with tab_gen:
                     st.rerun()
 
 
-# ── แท็บที่ 2: PDF ANALYZER (วิเคราะห์ใบเสนอราคา/สเปคกลางห้ามล็อกสเปค) ──────
+# ── แท็บที่ 2: PDF ANALYZER (วิเคราะห์ใบเสนอราคา/สเปคกลาง พร้อมระบบ Interactive Censor) ──
 with tab_pdf_analyze:
-    st.subheader("📂 อัปโหลดเอกสารสเปค/ใบเสนอราคา เพื่อวิเคราะห์ 'ร่างสเปคกลาง'")
-    st.write("ระบบจะอ่านไฟล์ PDF ของแต่ละบริษัท คัดชื่อข้อมูลติดต่อออกอัตโนมัติ แล้วใช้ Gemini สรุปเกณฑ์เทคนิคห้ามใส่แบรนด์ตามหลักจัดซื้อจัดจ้าง")
-
+    st.subheader("📂 อัปโหลดเอกสารสเปคเพื่อวิเคราะห์ร่างสเปคกลาง และกรองข้อมูลความลับ")
+    
     job_description_pdf = st.text_area(
         "ระบุลักษณะงานหรือวัตถุประสงค์ที่ต้องการนำไปใช้เพื่อตรวจเทียบ:",
         placeholder="เช่น ต้องการระบบคอมพิวเตอร์สำหรับการเรียนการสอนห้องปฏิบัติการคอมพิวเตอร์ จำนวน 40 เครื่อง...",
         key="pdf_job_desc"
     )
+
+    st.divider()
+    st.markdown("### 🔍 ขั้นตอนที่ 1: ตั้งค่าตัวกรองคำเบื้องต้น และอัปโหลดเอกสาร")
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        censor_company = st.text_input("ระบุชื่อบริษัทที่ต้องการให้ช่วยสแกนลบออกเป็นพิเศษ (ถ้ามี)", placeholder="เช่น บริษัท เอบีซี จำกัด")
+    with col_c2:
+        censor_phone = st.text_input("ระบุเบอร์โทรศัพท์ที่ต้องการให้ช่วยสแกนลบออกเป็นพิเศษ (ถ้ามี)", placeholder="เช่น 02-123-4567")
 
     uploaded_files = st.file_uploader(
         "เลือกไฟล์ PDF สเปคจากบริษัทต่างๆ (เลือกพร้อมกันตั้งแต่ 2 ไฟล์ขึ้นไป):", 
@@ -374,102 +380,96 @@ with tab_pdf_analyze:
 
     if uploaded_files:
         st.info(f"📁 อัปโหลดเอกสารเข้ามาทั้งหมด {len(uploaded_files)} บริษัท")
-        for idx, file in enumerate(uploaded_files):
-            st.write(f"• บริษัทที่ {idx+1}: {file.name}")
+        if st.button("🧼 เริ่มกระบวนการดึงข้อความและเซนเซอร์คำอัตโนมัติรอบแรก", type="secondary", use_container_width=True):
+            with st.spinner("กำลังอ่านข้อมูลจากไฟล์ PDF และทำการกรองข้อความความลับ..."):
+                # รีเซ็ตหรือล้างค่าเก่าออกก่อนสแกนชุดใหม่
+                st.session_state.pdf_censored_texts = {}
+                for file in uploaded_files:
+                    raw_text = extract_text_from_pdf(file)
+                    # วิ่งเข้าฟังก์ชัน Regex เปลี่ยนข้อความสุ่มเสี่ยงให้กลายเป็น [HIDDEN]
+                    cleaned_text = auto_censor_text(raw_text, custom_company=censor_company, custom_phone=censor_phone)
+                    st.session_state.pdf_censored_texts[file.name] = cleaned_text
+            st.success("✅ สแกนคำอัตโนมัติรอบแรกเสร็จสิ้น! เชิญตรวจสอบและลบคำเพิ่มในขั้นตอนด้านล่างครับ")
 
-    if st.button("🚀 เริ่มวิเคราะห์และสรุปสเปคกลาง", type="primary", key="btn_pdf_analyze"):
-        if not client:
-            st.error("🚨 ไม่สามารถเริ่มทำงานได้ เนื่องจากระบบยังไม่ได้เชื่อมต่อกับ Gemini API Key กรุณาตั้งค่าคีย์ก่อนครับ")
-        elif not job_description_pdf:
-            st.warning("⚠️ กรุณากรอกรายละเอียดลักษณะงานที่ต้องการนำไปใช้ก่อนครับ")
-        elif len(uploaded_files) < 2:
-            st.warning("⚠️ กรุณาอัปโหลดเอกสารเปรียบเทียบอย่างน้อย 2 บริษัทขึ้นไป เพื่อหาจุดร่วมสเปคกลางครับ")
-        else:
-            with st.spinner(f"กำลังสแกนและลบข้อมูลความลับยื่นประมวลผลบนคลาวด์ Gemini..."):
-                try:
-                    all_companies_data_prompt = ""
-                    for idx, file in enumerate(uploaded_files):
-                        company_label = f"[COMPANY_{idx+1}]"
-                        raw_text = extract_text_from_pdf(file)
-                        clean_text = auto_censor_text(raw_text)
-                        all_companies_data_prompt += f"\n--- ข้อมูลสเปคของ {company_label} ---\n"
-                        all_companies_data_prompt += clean_text[:5000] + "\n"
-                    
-                    prompt = f"""
-                    คุณคือผู้เชี่ยวชาญด้านการตรวจรับและจัดทำคุณลักษณะเฉพาะ (TOR Specialist) 
-                    งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(uploaded_files)} บริษัท) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ **"ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด"** แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
+    # 🟢 ขั้นตอนย่อยเพิ่มเข้ามา: แสดงผลให้เห็นว่าลบหมดหรือยัง และยอมให้ผู้ใช้ลบ/แก้ไขเพิ่มได้เอง
+    if st.session_state.pdf_censored_texts:
+        st.divider()
+        st.markdown("### 📝 ขั้นตอนที่ 2: หน้าต่างตรวจสอบเนื้อหาเอกสาร (ผู้ใช้สามารถแก้ไขหรือลบคำเพิ่มได้เอง)")
+        st.warning("⚠️ โปรดกวาดสายตาตรวจทาน หากยังพบชื่อบริษัท แบรนด์สินค้า หรือความลับที่ระบบหลุดลอกออกไม่หมด สามารถลบหรือพิมพ์แก้ไขในกล่องด้านล่างนี้ได้เลยทันที!")
 
-                    [ลักษณะงานที่ผู้ใช้ต้องการ]:
-                    {job_description_pdf}
-
-                    [ข้อมูลเอกสารสเปคของทุกบริษัท]:
-                    {all_companies_data_prompt}
-
-                    กรุณาตอบกลับเป็นภาษาไทย โดยใช้รูปแบบ Markdown ที่กระชับ เป็นข้อๆ และเข้าใจง่ายที่สุด ดังนี้:
-
-                    1. ## 📊 ตารางสรุปเปรียบเทียบสเปค (ทำเป็นตารางสั้นๆ สรุปเฉพาะจุดสำคัญ)
-                    
-                    2. ## 📋 ร่างสเปคกลาง (ข้อกำหนดขั้นต่ำที่โปร่งใสและแข่งขันได้จริง)
-                    *สั่งห้ามระบุคำว่า Intel, AMD, NVIDIA, GeForce โดยเด็ดขาด* ให้เปลี่ยนคำสั่งดังนี้:
-                    - CPU: ให้ใช้คำว่า "หน่วยประมวลผลกลาง ไม่น้อยกว่า X คอร์ X เธรด และมีความเร็วสัญญาณนาฬิกาขั้นต่ำ..."
-                    - GPU: ให้ใช้คำว่า "หน่วยประมวลผลกราฟิกชนิดแยก (Dedicated GPU) มีหน่วยความจำไม่น้อยกว่า X GB"
-                    - ส่วนอื่นๆ ให้ระบุเป็นค่าขั้นต่ำที่อย่างน้อย 3 รายผ่านเกณฑ์
-
-                    3. ## 💡 ความเห็นกรรมการ (สรุปสั้น 3 บรรทัด)
-                    - สเปคกลางนี้พอมั้ยกับงาน?
-                    - จุดที่ควรระวังหรือควร upgrade เพิ่มเพื่อความคุ้มค่า (สรุปเป็นข้อสั้นๆ ห้ามยาว)
-                    """
-                    
-                    # เรียกใช้งานผ่านโมเดล Gemini 2.5 Flash ตัวหลัก
-                    response = client.models.generate_content(
-                        model=MODEL_NAME,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            system_instruction="คุณคือผู้เชี่ยวชาญด้านกฎหมายพัสดุและขอบเขตสเปค TOR เครื่องคอมพิวเตอร์และอุปกรณ์เทคโนโลยีสารสนเทศ",
-                            temperature=0.4
-                        )
-                    )
-                    
-                    st.success("✨ Gemini วิเคราะห์และจัดทำร่างสเปคกลางสำเร็จเรียบร้อย!")
-                    st.markdown(response.text)
-                    
-                except Exception as e:
-                    st.error(f"เกิดข้อผิดพลาดในการประมวลผลสเปคกลาง: {str(e)}")
-
-
-# ── แท็บที่ 3: CENSOR TOOL (แอบตัดชื่อบริษัท/เบอร์โทรจำเพาะ) ────────────────
-with tab_censor_tool:
-    st.subheader("✂️ ระบบกรอกข้อมูลและตัดคำเพื่อปกป้องความลับเอกสาร")
-    st.write("ฟังก์ชันเสริม: วางข้อความที่คัดลอกมาเพื่อตรวจสอบและแอบตัดชื่อบริษัท/เบอร์โทรศัพท์จำเพาะออก ก่อนเอาไปใช้งานต่อ")
-
-    col_input1, col_input2 = st.columns(2)
-    with col_input1:
-        censor_company = st.text_input("ระบุชื่อบริษัทที่ต้องการแอบตัด (ถ้ามี)", placeholder="เช่น บริษัท เอบีซี จำกัด", key="c_comp")
-    with col_input2:
-        censor_phone = st.text_input("ระบุเบอร์โทรศัพท์จำเพาะที่ต้องการแอบตัด (ถ้ามี)", placeholder="เช่น 02-123-4567", key="c_phone")
-
-    raw_text_input = st.text_area(
-        "วางข้อความสเปคหรือเนื้อหา TOR ที่ต้องการให้ระบบกรองคำที่นี่:",
-        placeholder="วางเนื้อหาที่นี่... ระบบจะตัดคำกรองอัตโนมัติด้วย Regex ร่วมกับเงื่อนไขด้านบนของคุณ",
-        height=200,
-        key="raw_censor_area"
-    )
-
-    if st.button("🧼 เริ่มตัดและเซนเซอร์ข้อมูล", type="primary", key="btn_censor_run"):
-        if not raw_text_input:
-            st.warning("⚠️ กรุณาวางข้อความก่อนกดยืนยันการตัดคำ")
-        else:
-            with st.spinner("กำลังดำเนินการกรองคำอันตรายออก..."):
-                processed_output = auto_censor_text(
-                    raw_text_input, 
-                    custom_company=censor_company, 
-                    custom_phone=censor_phone
+        for file_name, text_content in list(st.session_state.pdf_censored_texts.items()):
+            with st.expander(f"📄 เนื้อหาที่ระบบกรองได้จากไฟล์: {file_name}", expanded=True):
+                # ใช้ text_area โชว์ข้อความที่สแกนได้ และผูก binding คืนค่ากลับเซสชันเมื่อมีการแก้ไขมือ
+                user_updated_text = st.text_area(
+                    label="กล่องแก้ไขข้อความ (ข้อมูลในนี้จะถูกนำไปส่งให้ AI ประมวลผลต่อ)",
+                    value=text_content,
+                    height=250,
+                    key=f"user_edit_{file_name}"
                 )
-                st.success("🔒 ระบบแอบตัดข้อมูลส่วนบุคคลและข้อมูลติดต่ออกเรียบร้อย!")
-                st.text_area("คัดลอกผลลัพธ์ไปใช้งานต่อได้ทันที:", value=processed_output, height=250, key="clean_output_area")
+                # อัปเดตข้อความที่ผู้ใช้ลบหรือพิมพ์แก้ไขด้วยตนเองเก็บลง State
+                st.session_state.pdf_censored_texts[file_name] = user_updated_text
+
+        st.divider()
+        st.markdown("### 🚀 ขั้นตอนที่ 3: ส่งข้อมูลที่ผ่านการตรวจสอบให้ AI สรุป")
+        
+        if st.button("🔥 เริ่มวิเคราะห์และสรุปสเปคกลางจากข้อความด้านบน", type="primary", use_container_width=True):
+            if not client:
+                st.error("🚨 ไม่สามารถเริ่มทำงานได้ เนื่องจากระบบยังไม่ได้เชื่อมต่อกับ Gemini API Key")
+            elif not job_description_pdf:
+                st.warning("⚠️ กรุณากรอกรายละเอียดลักษณะงานที่ต้องการนำไปใช้ก่อนครับ")
+            elif len(st.session_state.pdf_censored_texts) < 2:
+                st.warning("⚠️ กรุณาอัปโหลดเอกสารอย่างน้อย 2 บริษัทขึ้นไปเพื่อให้ AI ตรวจเปรียบเทียบได้")
+            else:
+                with st.spinner(f"Gemini กำลังนำข้อความที่คุณตรวจสอบแล้วไปประมวลผลสรุปสเปคกลาง..."):
+                    try:
+                        # ดึงข้อความเวอร์ชันล่าสุดที่ "มนุษย์กดแก้ไข/ลบคำด้วยมือแล้ว" มารวมกันส่งให้ AI
+                        all_companies_data_prompt = ""
+                        for idx, (f_name, final_text) in enumerate(st.session_state.pdf_censored_texts.items()):
+                            all_companies_data_prompt += f"\n--- ข้อมูลสเปคเอกสารชุดที่ {idx+1} ---\n"
+                            all_companies_data_prompt += final_text[:5000] + "\n"
+                        
+                        prompt = f"""
+                        คุณคือผู้เชี่ยวชาญด้านการตรวจรับและจัดทำคุณลักษณะเฉพาะ (TOR Specialist) 
+                        งานของคุณคือวิเคราะห์สเปคจากข้อเสนอที่ได้รับ ({len(st.session_state.pdf_censored_texts)} ชุด) แล้วสรุปเป็น 'ร่างสเปคกลาง' ที่ถูกต้องตามหลักกฎหมายจัดซื้อจัดจ้าง คือ **"ห้ามระบุชื่อยี่ห้อหรือรุ่นสินค้าเด็ดขาด"** แต่ให้ใช้เกณฑ์ทางเทคนิคที่ทุกบริษัทสามารถหาของมาสู้กันได้
+
+                        [ลักษณะงานที่ผู้ใช้ต้องการ]:
+                        {job_description_pdf}
+
+                        [ข้อมูลเอกสารสเปคของทุกบริษัท (ที่ผ่านการเซนเซอร์ข้อความความลับเรียบร้อยแล้ว)]:
+                        {all_companies_data_prompt}
+
+                        กรุณาตอบกลับเป็นภาษาไทย โดยใช้รูปแบบ Markdown ที่กระชับ เป็นข้อๆ และเข้าใจง่ายที่สุด ดังนี้:
+
+                        1. ## 📊 ตารางสรุปเปรียบเทียบสเปค (ทำเป็นตารางสั้นๆ สรุปเฉพาะจุดสำคัญ)
+                        
+                        2. ## 📋 ร่างสเปคกลาง (ข้อกำหนดขั้นต่ำที่โปร่งใสและแข่งขันได้จริง)
+                        *สั่งห้ามระบุคำว่า Intel, AMD, NVIDIA, GeForce โดยเด็ดขาด* ให้เปลี่ยนคำสั่งดังนี้:
+                        - CPU: ให้ใช้คำว่า "หน่วยประมวลผลกลาง ไม่น้อยกว่า X คอร์ X เธรด และมีความเร็วสัญญาณนาฬิกาขั้นต่ำ..."
+                        - GPU: ให้ใช้คำว่า "หน่วยประมวลผลกราฟิกชนิดแยก (Dedicated GPU) มีหน่วยความจำไม่น้อยกว่า X GB"
+                        - ส่วนอื่นๆ ให้ระบุเป็นค่าขั้นต่ำที่อย่างน้อย 3 รายผ่านเกณฑ์
+
+                        3. ## 💡 ความเห็นกรรมการ (สรุปสั้น 3 บรรทัด)
+                        - สเปคกลางนี้พอมั้ยกับงาน?
+                        - จุดที่ควรระวังหรือควร upgrade เพิ่มเพื่อความคุ้มค่า (สรุปเป็นข้อสั้นๆ ห้ามยาว)
+                        """
+                        
+                        response = client.models.generate_content(
+                            model=MODEL_NAME,
+                            contents=prompt,
+                            config=types.GenerateContentConfig(
+                                system_instruction="คุณคือผู้เชี่ยวชาญด้านกฎหมายพัสดุและขอบเขตสเปค TOR เครื่องคอมพิวเตอร์และอุปกรณ์เทคโนโลยีสารสนเทศ",
+                                temperature=0.4
+                            )
+                        )
+                        
+                        st.success("✨ Gemini วิเคราะห์และจัดทำร่างสเปคกลางสำเร็จเรียบร้อย!")
+                        st.markdown(response.text)
+                        
+                    except Exception as e:
+                        st.error(f"เกิดข้อผิดพลาดในการประมวลผลสเปคกลาง: {str(e)}")
 
 
-# ── แท็บที่ 4: SETUP & INFO (ตั้งค่า API และตารางอ้างอิง) ─────────────────
+# ── แท็บที่ 3: SETUP & INFO (ตั้งค่า API และตารางอ้างอิง) ─────────────────
 with tab_setup_info:
     col_setup, col_info = st.columns([1, 1])
     
@@ -477,7 +477,7 @@ with tab_setup_info:
         st.subheader("⚙️ การตั้งค่าการเชื่อมต่อ API ของ Gemini")
         st.markdown(
             """
-            * **กรณีติดตั้งขึ้น Streamlit Cloud (แนะนำ):** นำ API Key ไปฝากไว้ที่เมนู **Advanced Settings > Secrets** บน Dashboard โดยใส่ชื่อตัวแปรดังนี้:
+            * **กรณีติดตั้งขึ้น Streamlit Cloud (แนะนำ):** นำ API Key ไปฝากไว้ที่เมนู **Advanced Settings > Secrets** บน Dashboard โดยใช้ชื่อตัวแปร:
             ```toml
             GEMINI_API_KEY = "AIzaSyxxxxxxxxxxxx"
             ```
@@ -487,7 +487,7 @@ with tab_setup_info:
         user_key = st.text_input("ระบุ Gemini API Key (AIzaSy...) ", type="password", value=os.environ.get("GEMINI_API_KEY") if os.environ.get("GEMINI_API_KEY") else "", key="setup_key_input")
         if st.button("💾 บันทึก API Key เฉพาะเซสชันนี้", key="btn_save_key"):
             os.environ["GEMINI_API_KEY"] = user_key
-            st.success("บันทึกคีย์เรียบร้อย! กำลังรีเฟรชหน้าเว็บเพื่อเปลี่ยนระบบเชื่อมต่อ")
+            st.success("บันทึกคีย์เรียบร้อย! ระบบกำลังรีเฟรช")
             time.sleep(1)
             st.rerun()
 
@@ -497,7 +497,7 @@ with tab_setup_info:
         info_data = [
             {"หัวข้อ ว.159": "ข้อ 1", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[1], "คำอธิบายเบื้องต้น": "ความเป็นมาของโครงการ"},
             {"หัวข้อ ว.159": "ข้อ 2", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[2], "คำอธิบายเบื้องต้น": "วัตถุประสงค์ในการจัดซื้อจัดจ้าง"},
-            {"หัวข้อ ว.159": "ข้อ 3", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[3], "คำอธิบายเบื้องต้น": "คุณสมบัติที่จำเป็นของผู้ยื่นข้อเสนอ"},
+            {"Workflow": "ข้อ 3", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[3], "คำอธิบายเบื้องต้น": "คุณสมบัติที่จำเป็นของผู้ยื่นข้อเสนอ"},
             {"หัวข้อ ว.159": "ข้อ 4", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[4], "คำอธิบายเบื้องต้น": "รายละเอียดคุณลักษณะเฉพาะพัสดุ"},
             {"หัวข้อ ว.159": "ข้อ 5", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[5], "คำอธิบายเบื้องต้น": "กำหนดระยะเวลาในการดำเนินโครงการ"},
             {"หัวข้อ ว.159": "ข้อ 6", "ชื่อโครงร่างมาตรฐาน": TOR_TITLES[6], "คำอธิบายเบื้องต้น": "เงื่อนไขการส่งมอบงานและการตรวจรับ"},
