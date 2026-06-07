@@ -33,81 +33,523 @@ TYPHOON_MODEL = "typhoon-v2.5-30b-a3b-instruct"
 st.set_page_config(page_title="TOR Workspace", page_icon="🛡️", layout="wide")
 
 _CSS = """
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ════════════════════════════════════════════════
+   DESIGN TOKENS
+════════════════════════════════════════════════ */
 :root {
-    --tor-surface:      var(--secondary-background-color);
-    --tor-bg:           var(--background-color);
-    --tor-text:         var(--text-color);
-    --tor-border:       rgba(128,128,128,0.18);
-    --tor-border-hover: rgba(59,130,246,0.4);
-    --tor-accent:       #3B82F6;
-    --tor-accent-dim:   rgba(59,130,246,0.14);
-    --tor-muted:        rgba(128,128,128,0.75);
+    --bg:          var(--background-color);
+    --surface:     var(--secondary-background-color);
+    --text:        var(--text-color);
+    --muted:       rgba(128,128,128,0.65);
+    --border:      rgba(128,128,128,0.10);
+    --border-md:   rgba(128,128,128,0.20);
+
+    --navy:        #060E24;
+    --blue:        #1C4ED8;
+    --blue-lt:     #3B82F6;
+    --blue-dim:    rgba(59,130,246,0.10);
+    --blue-glow:   rgba(59,130,246,0.22);
+    --gold:        #D4A017;
+    --gold-dim:    rgba(212,160,23,0.12);
+    --green:       #059669;
+    --green-dim:   rgba(5,150,105,0.12);
+    --amber:       #D97706;
+    --amber-dim:   rgba(217,119,6,0.12);
+    --red:         #DC2626;
+    --red-dim:     rgba(220,38,38,0.10);
+
+    --radius-sm: 6px;
+    --radius:    10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+
+    --shadow-sm:   0 1px 4px rgba(0,0,0,0.06);
+    --shadow:      0 4px 16px rgba(0,0,0,0.08);
+    --shadow-lg:   0 12px 40px rgba(0,0,0,0.14);
+    --shadow-blue: 0 4px 20px rgba(28,78,216,0.35);
 }
+
+/* ════ RESET ════ */
 *, *::before, *::after { box-sizing: border-box; }
-html, body, [class*="css"] { font-family: 'Noto Sans Thai', sans-serif !important; }
-.stApp { background: var(--tor-bg); color: var(--tor-text); }
+html, body, [class*="css"] {
+    font-family: 'Sarabun', sans-serif !important;
+}
+
+/* ════ STREAMLIT SHELL ════ */
+.stApp { background: var(--bg); color: var(--text); }
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { max-width: 1100px !important; padding: 2rem 2rem 6rem !important; }
-.app-header { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 16px; padding: 28px 36px; margin-bottom: 32px; position: relative; overflow: hidden; }
-.app-header::before { content: ''; position: absolute; top: 0; right: 0; width: 300px; height: 100%; background: radial-gradient(ellipse at right center, var(--tor-accent-dim) 0%, transparent 70%); pointer-events: none; }
-.app-header-title { font-size: 1.6rem; font-weight: 700; color: var(--tor-text); margin: 0 0 6px; }
-.app-header-sub { font-size: 0.85rem; color: var(--tor-muted); margin: 0; display: flex; align-items: center; gap: 16px; }
-.badge { background: var(--tor-accent-dim); color: var(--tor-accent); border: 1px solid rgba(59,130,246,0.3); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
-.sec-header { display: flex; align-items: center; gap: 12px; margin: 36px 0 20px; }
-.sec-number { width: 32px; height: 32px; background: linear-gradient(135deg, #2563EB, #1D4ED8); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; flex-shrink: 0; box-shadow: 0 4px 12px rgba(37,99,235,0.35); }
-.sec-title { font-size: 1.05rem; font-weight: 600; color: var(--tor-text); margin: 0; }
-.card { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
-.stTextInput > label, .stTextArea > label, .stNumberInput > label, .stRadio > label, .stFileUploader > label { color: var(--tor-muted) !important; font-size: 0.82rem !important; font-weight: 500 !important; letter-spacing: 0.3px !important; text-transform: uppercase !important; margin-bottom: 6px !important; }
-.stTextInput input, .stNumberInput input { background: var(--tor-bg) !important; border: 1px solid var(--tor-border) !important; border-radius: 8px !important; color: var(--tor-text) !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.95rem !important; padding: 10px 14px !important; transition: border-color 0.2s, box-shadow 0.2s !important; }
-.stTextInput input:focus, .stNumberInput input:focus { border-color: var(--tor-accent) !important; box-shadow: 0 0 0 3px var(--tor-accent-dim) !important; }
-.stTextArea textarea { background: var(--tor-bg) !important; border: 1px solid var(--tor-border) !important; border-radius: 8px !important; color: var(--tor-text) !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.93rem !important; line-height: 1.7 !important; transition: border-color 0.2s, box-shadow 0.2s !important; resize: vertical !important; }
-.stTextArea textarea:focus { border-color: var(--tor-accent) !important; box-shadow: 0 0 0 3px var(--tor-accent-dim) !important; }
+.block-container {
+    max-width: 1080px !important;
+    padding: 1.5rem 2rem 8rem !important;
+}
+
+/* ════ HERO ════ */
+.hero {
+    background: linear-gradient(140deg, #060E24 0%, #0D1B3E 45%, #132045 70%, #1a2f6b 100%);
+    border-radius: var(--radius-xl);
+    padding: 38px 46px 34px;
+    margin-bottom: 36px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(59,130,246,0.18);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.03) inset;
+}
+.hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+}
+.hero-orb-1 {
+    position: absolute;
+    width: 420px; height: 420px;
+    right: -100px; top: -140px;
+    background: radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 65%);
+    pointer-events: none;
+}
+.hero-orb-2 {
+    position: absolute;
+    width: 220px; height: 220px;
+    left: 30%; bottom: -70px;
+    background: radial-gradient(circle, rgba(212,160,23,0.12) 0%, transparent 65%);
+    pointer-events: none;
+}
+.hero-top-line {
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent 5%, rgba(212,160,23,0.7) 30%, rgba(59,130,246,0.5) 70%, transparent 95%);
+}
+.hero-eyebrow {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 16px; position: relative;
+}
+.hero-line {
+    width: 24px; height: 1.5px;
+    background: var(--gold); border-radius: 2px; opacity: 0.7;
+}
+.hero-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--gold);
+}
+.hero-title {
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 2rem; font-weight: 700;
+    color: #F4F9FF;
+    margin: 0 0 8px;
+    letter-spacing: -0.5px; line-height: 1.15;
+    position: relative;
+}
+.hero-title-accent {
+    background: linear-gradient(135deg, #7DB8FA, #BFDBFE);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.hero-sub {
+    font-size: 0.875rem;
+    color: rgba(180,210,255,0.55);
+    margin: 0 0 24px;
+    line-height: 1.7; position: relative;
+    max-width: 520px;
+}
+.hero-badges {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    position: relative;
+}
+.hbadge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 99px;
+    padding: 5px 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem; font-weight: 500;
+    color: rgba(180,215,255,0.75);
+    backdrop-filter: blur(8px);
+    transition: border-color 0.2s, background 0.2s;
+}
+.hbadge:hover {
+    border-color: rgba(59,130,246,0.4);
+    background: rgba(59,130,246,0.08);
+}
+.hbadge-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #34D399;
+    box-shadow: 0 0 6px #34D399;
+    animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.85)} }
+
+/* ════ STEP HEADERS ════ */
+.step-header {
+    display: flex; align-items: center; gap: 14px;
+    margin: 40px 0 18px; position: relative;
+}
+.step-header::after {
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(59,130,246,0.2), transparent);
+    margin-left: 4px;
+}
+.step-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(135deg, rgba(28,78,216,0.12), rgba(59,130,246,0.06));
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 99px;
+    padding: 6px 18px 6px 7px;
+}
+.step-num {
+    width: 30px; height: 30px;
+    background: linear-gradient(135deg, #1C4ED8, #2563EB);
+    color: white; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem; font-weight: 600;
+    box-shadow: 0 3px 10px rgba(28,78,216,0.4);
+    flex-shrink: 0;
+}
+.step-title {
+    font-size: 0.92rem; font-weight: 700;
+    color: var(--blue-lt); letter-spacing: 0.2px;
+}
+
+/* ════ CARDS ════ */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 28px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--border-md); }
+
+/* ════ FORM LABELS ════ */
+.stTextInput > label,
+.stTextArea > label,
+.stNumberInput > label,
+.stRadio > label,
+.stFileUploader > label {
+    font-family: 'IBM Plex Mono', monospace !important;
+    font-size: 0.65rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 1.5px !important;
+    text-transform: uppercase !important;
+    color: var(--muted) !important;
+    margin-bottom: 6px !important;
+}
+
+/* ════ INPUTS ════ */
+.stTextInput input,
+.stNumberInput input {
+    background: var(--bg) !important;
+    border: 1.5px solid var(--border-md) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text) !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.95rem !important;
+    padding: 10px 14px !important;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+.stTextInput input:focus,
+.stNumberInput input:focus {
+    border-color: var(--blue-lt) !important;
+    box-shadow: 0 0 0 3px var(--blue-dim) !important;
+    outline: none !important;
+}
+.stTextArea textarea {
+    background: var(--bg) !important;
+    border: 1.5px solid var(--border-md) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text) !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.93rem !important;
+    line-height: 1.75 !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    resize: vertical !important;
+}
+.stTextArea textarea:focus {
+    border-color: var(--blue-lt) !important;
+    box-shadow: 0 0 0 3px var(--blue-dim) !important;
+}
+
+/* ════ RADIO ════ */
 .stRadio > div { gap: 12px !important; }
-.stRadio [data-testid="stMarkdownContainer"] p { color: var(--tor-text) !important; font-size: 0.9rem !important; }
-.stButton > button { border-radius: 8px !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.88rem !important; font-weight: 600 !important; transition: all 0.18s !important; }
-.stButton > button[kind="primary"] { background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important; color: white !important; box-shadow: 0 4px 14px rgba(37,99,235,0.35) !important; border: none !important; }
-.stButton > button[kind="primary"]:hover { transform: translateY(-1px) !important; box-shadow: 0 6px 20px rgba(37,99,235,0.45) !important; }
-.stButton > button[kind="secondary"] { background: var(--tor-surface) !important; color: var(--tor-muted) !important; border: 1px solid var(--tor-border) !important; }
-.stButton > button[kind="secondary"]:hover { border-color: var(--tor-border-hover) !important; color: var(--tor-text) !important; }
-.stButton > button:disabled { opacity: 0.4 !important; cursor: not-allowed !important; transform: none !important; }
-.tor-card { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; transition: border-color 0.2s; }
-.tor-card:hover { border-color: var(--tor-border-hover); }
-.tor-card.generating { border-color: var(--tor-accent); box-shadow: 0 0 0 1px var(--tor-accent-dim), 0 4px 24px var(--tor-accent-dim); }
-.tor-card.done { border-color: rgba(16,185,129,0.35); }
-.tor-card-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
-.tor-num { width: 26px; height: 26px; background: var(--tor-accent-dim); color: var(--tor-accent); border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'IBM Plex Mono', monospace; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.tor-num.done-num { background: rgba(16,185,129,0.18); color: #10B981; }
-.tor-title-text { font-size: 0.9rem; font-weight: 600; color: var(--tor-text); flex: 1; }
-.status-gen { background: rgba(245,158,11,0.15); color: #D97706; border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; font-family: 'IBM Plex Mono', monospace; animation: pulse-badge 1.2s ease-in-out infinite; }
-.status-done { background: rgba(16,185,129,0.12); color: #059669; border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
-@keyframes pulse-badge { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
-.info-box { background: var(--tor-accent-dim); border: 1px solid rgba(59,130,246,0.28); border-radius: 8px; padding: 12px 16px; color: var(--tor-accent); font-size: 0.88rem; margin: 12px 0; }
-.warn-box { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.28); border-radius: 8px; padding: 12px 16px; color: #B45309; font-size: 0.88rem; margin: 12px 0; }
-.success-box { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.28); border-radius: 8px; padding: 12px 16px; color: #047857; font-size: 0.88rem; margin: 12px 0; }
-.error-box { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.28); border-radius: 8px; padding: 12px 16px; color: #B91C1C; font-size: 0.88rem; margin: 12px 0; }
-.stProgress > div > div > div { background: linear-gradient(90deg, #2563EB, #60A5FA) !important; border-radius: 99px !important; }
-.stProgress > div > div { background: var(--tor-border) !important; border-radius: 99px !important; }
-[data-testid="stFileUploader"] { background: var(--tor-surface) !important; border: 1.5px dashed var(--tor-border) !important; border-radius: 10px !important; padding: 8px !important; transition: border-color 0.2s !important; }
-[data-testid="stFileUploader"]:hover { border-color: var(--tor-border-hover) !important; }
-.streamlit-expanderHeader { background: var(--tor-surface) !important; border: 1px solid var(--tor-border) !important; border-radius: 8px !important; color: var(--tor-text) !important; font-weight: 600 !important; font-size: 0.88rem !important; }
-.stCheckbox label { color: var(--tor-muted) !important; font-size: 0.88rem !important; }
-.stDownloadButton > button { background: var(--tor-surface) !important; border: 1px solid var(--tor-border) !important; color: var(--tor-text) !important; border-radius: 10px !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.88rem !important; font-weight: 600 !important; padding: 12px 16px !important; width: 100% !important; transition: all 0.18s !important; }
-.stDownloadButton > button:hover { background: var(--tor-accent-dim) !important; border-color: var(--tor-border-hover) !important; color: var(--tor-accent) !important; transform: translateY(-1px) !important; }
-.export-section { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 16px; padding: 28px; margin-top: 36px; }
-.export-title { font-size: 1rem; font-weight: 700; color: var(--tor-text); }
-.export-sub { font-size: 0.8rem; color: var(--tor-muted); }
-hr { border-color: var(--tor-border) !important; margin: 28px 0 !important; }
-.stSpinner > div { border-top-color: var(--tor-accent) !important; }
-[data-testid="stToast"] { background: var(--tor-surface) !important; border: 1px solid var(--tor-border) !important; color: var(--tor-text) !important; border-radius: 10px !important; }
-.stream-container { background: var(--tor-bg); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 16px; min-height: 80px; font-size: 0.92rem; line-height: 1.8; color: var(--tor-text); }
+.stRadio [data-testid="stMarkdownContainer"] p {
+    color: var(--text) !important; font-size: 0.9rem !important;
+}
+
+/* ════ BUTTONS ════ */
+.stButton > button {
+    border-radius: var(--radius) !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.9rem !important; font-weight: 700 !important;
+    transition: all 0.2s !important; letter-spacing: 0.2px !important;
+}
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #1C4ED8 0%, #1e40af 100%) !important;
+    color: white !important;
+    box-shadow: var(--shadow-blue) !important;
+    border: none !important;
+    padding: 10px 24px !important;
+}
+.stButton > button[kind="primary"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 28px rgba(28,78,216,0.5) !important;
+    background: linear-gradient(135deg, #2563EB 0%, #1C4ED8 100%) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: var(--surface) !important;
+    color: var(--muted) !important;
+    border: 1.5px solid var(--border-md) !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: var(--blue-lt) !important;
+    color: var(--blue-lt) !important;
+    background: var(--blue-dim) !important;
+}
+.stButton > button:disabled {
+    opacity: 0.35 !important; cursor: not-allowed !important;
+    transform: none !important;
+}
+
+/* ════ TOR SECTION CARDS ════ */
+.tor-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 8px; overflow: hidden;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+}
+.tor-card::before {
+    content: ''; position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--border-md);
+    border-radius: 3px 0 0 3px;
+    transition: background 0.25s;
+}
+.tor-card:hover {
+    border-color: rgba(59,130,246,0.28);
+    box-shadow: 0 4px 16px rgba(59,130,246,0.08);
+    transform: translateX(2px);
+}
+.tor-card:hover::before { background: var(--blue-lt); }
+.tor-card.generating {
+    border-color: rgba(59,130,246,0.5);
+    box-shadow: 0 0 0 1px rgba(59,130,246,0.15), 0 6px 28px rgba(59,130,246,0.15);
+}
+.tor-card.generating::before {
+    background: linear-gradient(180deg, var(--blue-lt), #60A5FA);
+    animation: stripe-slide 1.5s linear infinite;
+}
+@keyframes stripe-slide { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.tor-card.done::before { background: var(--green); }
+.tor-card.done { border-color: rgba(5,150,105,0.22); }
+
+.tor-card-header {
+    padding: 14px 20px 14px 24px;
+    display: flex; align-items: center; gap: 14px;
+    cursor: pointer; user-select: none;
+}
+.tor-index {
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 1.05rem; font-weight: 700;
+    color: var(--border-md); min-width: 32px;
+    transition: color 0.2s; letter-spacing: -0.5px;
+}
+.tor-card:hover .tor-index { color: var(--blue-lt); }
+.tor-card.done .tor-index  { color: var(--green); }
+.tor-card.generating .tor-index { color: var(--blue-lt); }
+.tor-title-text {
+    font-size: 0.92rem; font-weight: 600;
+    color: var(--text); flex: 1; line-height: 1.4;
+}
+
+/* ════ STATUS CHIPS ════ */
+.chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 99px; padding: 3px 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem; font-weight: 600; letter-spacing: 0.3px;
+}
+.chip-gen {
+    background: var(--amber-dim); color: var(--amber);
+    border: 1px solid rgba(217,119,6,0.3);
+    animation: chip-pulse 1.4s ease-in-out infinite;
+}
+.chip-done {
+    background: var(--green-dim); color: var(--green);
+    border: 1px solid rgba(5,150,105,0.3);
+}
+@keyframes chip-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* ════ ALERT BOXES ════ */
+.alert {
+    display: flex; align-items: flex-start; gap: 10px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 12px 16px; font-size: 0.88rem;
+    line-height: 1.6; margin: 10px 0; border-left: 3px solid;
+}
+.alert-info  { background: var(--blue-dim);  border-color: var(--blue-lt); color: var(--blue-lt); }
+.alert-warn  { background: var(--amber-dim); border-color: var(--amber);   color: var(--amber); }
+.alert-ok    { background: var(--green-dim); border-color: var(--green);   color: var(--green); }
+.alert-error { background: var(--red-dim);   border-color: var(--red);     color: var(--red); }
+
+.info-box    { background: var(--blue-dim);  border-left: 3px solid var(--blue-lt); border-radius: 0 var(--radius) var(--radius) 0; padding: 12px 16px; color: var(--blue-lt); font-size: 0.88rem; margin: 10px 0; }
+.warn-box    { background: var(--amber-dim); border-left: 3px solid var(--amber);   border-radius: 0 var(--radius) var(--radius) 0; padding: 12px 16px; color: var(--amber);   font-size: 0.88rem; margin: 10px 0; }
+.success-box { background: var(--green-dim); border-left: 3px solid var(--green);   border-radius: 0 var(--radius) var(--radius) 0; padding: 12px 16px; color: var(--green);   font-size: 0.88rem; margin: 10px 0; }
+.error-box   { background: var(--red-dim);   border-left: 3px solid var(--red);     border-radius: 0 var(--radius) var(--radius) 0; padding: 12px 16px; color: var(--red);     font-size: 0.88rem; margin: 10px 0; }
+
+/* ════ PROJECT INFO PILL ════ */
+.proj-pill {
+    display: inline-flex; align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border-md);
+    border-radius: var(--radius-lg);
+    padding: 10px 20px; margin-bottom: 16px;
+    font-size: 0.88rem; color: var(--text);
+    box-shadow: var(--shadow-sm);
+    flex-wrap: wrap; row-gap: 4px;
+}
+.proj-pill strong { color: var(--blue-lt); }
+.pill-sep { color: var(--border-md); margin: 0 12px; font-size: 1rem; }
+
+/* ════ STREAM CONTAINER ════ */
+.stream-container {
+    background: var(--bg);
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: var(--radius);
+    padding: 18px 20px; min-height: 90px;
+    font-size: 0.92rem; line-height: 1.85;
+    color: var(--text); position: relative;
+}
+.stream-container::before {
+    content: 'GENERATING';
+    position: absolute; top: 10px; right: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem; font-weight: 600;
+    letter-spacing: 2px; color: var(--blue-lt); opacity: 0.5;
+}
+
+/* ════ PROGRESS BAR ════ */
+.stProgress > div > div > div {
+    background: linear-gradient(90deg, #1C4ED8, #3B82F6, #60A5FA) !important;
+    border-radius: 99px !important;
+}
+.stProgress > div > div {
+    background: var(--border) !important;
+    border-radius: 99px !important; height: 6px !important;
+}
+
+/* ════ FILE UPLOADER ════ */
+[data-testid="stFileUploader"] {
+    background: var(--surface) !important;
+    border: 1.5px dashed var(--border-md) !important;
+    border-radius: var(--radius-lg) !important;
+    padding: 10px !important;
+    transition: border-color 0.2s, background 0.2s !important;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: var(--blue-lt) !important;
+    background: var(--blue-dim) !important;
+}
+
+/* ════ EXPANDER ════ */
+.streamlit-expanderHeader {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text) !important; font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    transition: border-color 0.2s !important;
+}
+.streamlit-expanderHeader:hover { border-color: var(--border-md) !important; }
+
+/* ════ CHECKBOX ════ */
+.stCheckbox label { font-size: 0.9rem !important; color: var(--text) !important; }
+
+/* ════ EXPORT ZONE ════ */
+.export-zone {
+    background: var(--surface);
+    border: 1px solid var(--border-md);
+    border-radius: var(--radius-xl);
+    padding: 32px 36px; margin-top: 44px;
+    position: relative; overflow: hidden;
+    box-shadow: var(--shadow);
+}
+.export-zone::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #1C4ED8, #3B82F6, #60A5FA, rgba(96,165,250,0));
+}
+.export-heading {
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 1.1rem; font-weight: 700;
+    color: var(--text); margin: 0 0 4px; letter-spacing: -0.3px;
+}
+.export-sub { font-size: 0.8rem; color: var(--muted); margin: 0 0 24px; }
+
+/* ════ DOWNLOAD BUTTONS ════ */
+.stDownloadButton > button {
+    background: var(--bg) !important;
+    border: 1.5px solid var(--border-md) !important;
+    color: var(--text) !important;
+    border-radius: var(--radius-lg) !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.9rem !important; font-weight: 700 !important;
+    padding: 14px 18px !important; width: 100% !important;
+    transition: all 0.2s !important;
+    box-shadow: var(--shadow-sm) !important;
+    text-align: left !important;
+}
+.stDownloadButton > button:hover {
+    background: var(--blue-dim) !important;
+    border-color: var(--blue-lt) !important;
+    color: var(--blue-lt) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(59,130,246,0.15) !important;
+}
+
+/* ════ MISC ════ */
+hr { border-color: var(--border) !important; margin: 32px 0 !important; }
+.stSpinner > div { border-top-color: var(--blue-lt) !important; }
+[data-testid="stToast"] {
+    background: var(--surface) !important;
+    border: 1px solid var(--border-md) !important;
+    color: var(--text) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+/* ════ GENERATION BANNER ════ */
+.gen-banner {
+    display: flex; align-items: center; gap: 12px;
+    background: linear-gradient(90deg, var(--blue-dim), transparent);
+    border: 1px solid var(--blue-glow);
+    border-radius: var(--radius);
+    padding: 12px 18px; margin-bottom: 8px; font-size: 0.88rem;
+}
+.gen-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--blue-dim);
+    border-top-color: var(--blue-lt);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 """
 
-# inject CSS — ใช้ components.html เพื่อป้องกัน Streamlit sanitize <style> tag
 components.html(_CSS, height=0)
-
 
 # ══════════════════════════════════════════════════════════════════
 # 3. CONSTANTS
@@ -145,17 +587,17 @@ IT_BRANDS = (
 # 4. STATE MANAGEMENT
 # ══════════════════════════════════════════════════════════════════
 _DEFAULTS = {
-    "tor_sections":         {i: "" for i in range(1, 11)},
-    "meta_data":            {},
-    "pdf_pre_cleaned_texts":{},
-    "ai_drafted_spec_v4":   "",
-    "generating_section":   None,
-    "generate_all_queue":   [],
-    "gen_error":            None,
-    "proj_name":            "",
-    "proj_agency":          "",
-    "proj_budget":          0,
-    "proj_criteria":        "เกณฑ์ราคา",
+    "tor_sections":          {i: "" for i in range(1, 11)},
+    "meta_data":             {},
+    "pdf_pre_cleaned_texts": {},
+    "ai_drafted_spec_v4":    "",
+    "generating_section":    None,
+    "generate_all_queue":    [],
+    "gen_error":             None,
+    "proj_name":             "",
+    "proj_agency":           "",
+    "proj_budget":           0,
+    "proj_criteria":         "เกณฑ์ราคา",
 }
 for k, v in _DEFAULTS.items():
     if k not in st.session_state:
@@ -231,8 +673,7 @@ def generate_typhoon_section(section_num, prompt_text, stream_placeholder):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": prompt_text}
             ],
-            temperature=0.4,
-            stream=True
+            temperature=0.4, stream=True
         )
         for chunk in stream:
             delta = chunk.choices[0].delta
@@ -273,24 +714,20 @@ def build_word_document():
     style = doc.styles['Normal']
     style.font.name = 'TH Sarabun New'
     style.font.size = Pt(14)
-
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r = title_p.add_run("ร่างขอบเขตของงาน (TOR)")
     r.bold = True; r.font.size = Pt(18)
     r.font.name = 'TH Sarabun New'
     r.font.color.rgb = RGBColor(0x1E, 0x3A, 0x8A)
-
     meta = st.session_state.meta_data
     sub_p = doc.add_paragraph()
     sub_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     sub_r = sub_p.add_run(f"โครงการ: {meta.get('title','ไม่ได้ระบุ')}")
     sub_r.font.size = Pt(15); sub_r.font.name = 'TH Sarabun New'
-
     doc.add_paragraph(f"หน่วยงาน: {meta.get('agency','-')}").runs[0].font.name = 'TH Sarabun New'
     doc.add_paragraph(f"วงเงินงบประมาณ: {meta.get('budget',0):,} บาท").runs[0].font.name = 'TH Sarabun New'
     doc.add_paragraph("─" * 50)
-
     for idx in range(1, 11):
         hp = doc.add_paragraph()
         hr = hp.add_run(f"ข้อ {idx}  {TOR_TITLES[idx]}")
@@ -312,15 +749,15 @@ def build_html_document():
             f'<div class="sec-content">{txt}</div></div>'
         )
     return f"""<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-body{{font-family:'Noto Sans Thai',sans-serif;padding:48px 60px;color:#1e293b;line-height:1.8;max-width:860px;margin:0 auto}}
-h1{{text-align:center;font-size:22px;color:#1E3A8A;margin-bottom:4px}}
+body{{font-family:'Sarabun',sans-serif;padding:48px 60px;color:#1e293b;line-height:1.85;max-width:860px;margin:0 auto}}
+h1{{text-align:center;font-size:22px;color:#0D1B3E;margin-bottom:4px;letter-spacing:-0.3px}}
 .meta{{text-align:center;font-size:13px;color:#64748b;margin-bottom:36px}}
-.section{{margin-bottom:28px;page-break-inside:avoid}}
-.sec-title{{font-weight:700;font-size:15px;color:#1E3A8A;border-left:3px solid #3B82F6;
-   padding:4px 0 4px 12px;margin-bottom:10px;background:#F0F6FF;border-radius:0 4px 4px 0}}
-.sec-content{{font-size:14px;text-align:justify;padding-left:4px}}
+.section{{margin-bottom:32px;page-break-inside:avoid}}
+.sec-title{{font-weight:700;font-size:15px;color:#1C4ED8;border-left:3px solid #3B82F6;
+   padding:5px 0 5px 14px;margin-bottom:12px;background:#EFF6FF;border-radius:0 6px 6px 0}}
+.sec-content{{font-size:14.5px;text-align:justify;padding-left:2px;color:#1e293b}}
 </style></head><body>
 <h1>ร่างขอบเขตของงาน (TOR)</h1>
 <div class="meta">
@@ -331,15 +768,25 @@ h1{{text-align:center;font-size:22px;color:#1E3A8A;margin-bottom:4px}}
 {sections_html}</body></html>"""
 
 # ══════════════════════════════════════════════════════════════════
-# 7. UI — HEADER
+# 7. UI — HERO HEADER
 # ══════════════════════════════════════════════════════════════════
 st.markdown("""
-<div class="app-header">
-  <div class="app-header-title">🛡️ AI Procurement TOR Workspace</div>
-  <div class="app-header-sub">
-    <span class="badge">Gemini 2.5 Flash</span>
-    <span class="badge">Typhoon v2.5</span>
-    <span>ระบบช่วยร่างขอบเขตของงาน (TOR) ตามมาตรฐาน ว.159 กรมบัญชีกลาง</span>
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-orb-1"></div>
+  <div class="hero-orb-2"></div>
+  <div class="hero-top-line"></div>
+  <div class="hero-eyebrow">
+    <div class="hero-line"></div>
+    <span class="hero-label">AI Procurement System · ว.159</span>
+    <div class="hero-line"></div>
+  </div>
+  <div class="hero-title">🛡️ TOR <span class="hero-title-accent">Workspace</span></div>
+  <div class="hero-sub">ระบบช่วยร่างขอบเขตของงาน ตามมาตรฐานกรมบัญชีกลาง — คัดกรองความโปร่งใส · สกัดสเปค · ร่าง 10 ข้อ</div>
+  <div class="hero-badges">
+    <span class="hbadge"><span class="hbadge-dot"></span>Gemini 2.5 Flash</span>
+    <span class="hbadge"><span class="hbadge-dot"></span>Typhoon v2.5</span>
+    <span class="hbadge">กค (กวจ) 0405.4/ว 159</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -348,9 +795,11 @@ st.markdown("""
 # 8. STEP 1 — PROJECT INFO
 # ══════════════════════════════════════════════════════════════════
 st.markdown("""
-<div class="sec-header">
-  <div class="sec-number">1</div>
-  <p class="sec-title">ข้อมูลโครงการ</p>
+<div class="step-header">
+  <div class="step-pill">
+    <div class="step-num">1</div>
+    <span class="step-title">ข้อมูลโครงการ</span>
+  </div>
 </div>""", unsafe_allow_html=True)
 
 with st.container():
@@ -368,7 +817,7 @@ with st.container():
         p_agency = st.text_input(
             "หน่วยงาน / ส่วนราชการ",
             value=st.session_state.proj_agency,
-            placeholder="เช่น กองพัสดุ กรมXXX",
+            placeholder="เช่น กองพัสดุ กรม XXX",
             key="inp_agency"
         )
         st.session_state.proj_agency = p_agency
@@ -396,9 +845,11 @@ with st.container():
 # 9. STEP 2 — SPEC EXTRACTION
 # ══════════════════════════════════════════════════════════════════
 st.markdown("""
-<div class="sec-header">
-  <div class="sec-number">2</div>
-  <p class="sec-title">สกัดสเปคอ้างอิง &amp; คัดกรองความโปร่งใส</p>
+<div class="step-header">
+  <div class="step-pill">
+    <div class="step-num">2</div>
+    <span class="step-title">สกัดสเปคอ้างอิง &amp; คัดกรองความโปร่งใส</span>
+  </div>
 </div>""", unsafe_allow_html=True)
 
 st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -417,14 +868,14 @@ with cf1:
 with cf2:
     st.write("")
     st.write("")
-    do_clean = st.button("✂️ Regex คลีนข้อมูล", use_container_width=True, type="secondary")
+    do_clean = st.button("✂️  Regex คลีนข้อมูล", use_container_width=True, type="secondary")
 
 if do_clean:
     if not uploaded_files:
         st.markdown('<div class="warn-box">⚠️ กรุณาอัปโหลดไฟล์ PDF ก่อน</div>', unsafe_allow_html=True)
     else:
         st.session_state.pdf_pre_cleaned_texts = {}
-        with st.spinner("⚡ กำลัง Regex สกัดข้อมูล..."):
+        with st.spinner("กำลัง Regex สกัดข้อมูล..."):
             for f in uploaded_files:
                 raw = extract_text_from_pdf(f)
                 st.session_state.pdf_pre_cleaned_texts[f.name] = local_regex_cleaner(raw)
@@ -436,20 +887,17 @@ if do_clean:
 st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.pdf_pre_cleaned_texts:
-    st.markdown(
-        '<div class="info-box">💡 ตรวจสอบและลบชื่อบริษัท/แบรนด์ที่อาจตกค้าง ก่อนส่ง Gemini</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown('<div class="info-box">💡 ตรวจสอบและลบชื่อบริษัท/แบรนด์ที่อาจตกค้าง ก่อนส่ง Gemini</div>', unsafe_allow_html=True)
     for fname, txt in list(st.session_state.pdf_pre_cleaned_texts.items()):
-        with st.expander(f"📁 {fname}", expanded=True):
+        with st.expander(f"📁  {fname}", expanded=True):
             edited = st.text_area(
                 "แก้ไขได้โดยตรง:", value=txt, height=160, key=f"verify_{fname}"
             )
             st.session_state.pdf_pre_cleaned_texts[fname] = edited
 
-    confirmed = st.checkbox("✅ ยืนยันว่าตรวจสอบ / ลบแบรนด์เสร็จสิ้นแล้ว")
+    confirmed = st.checkbox("✅  ยืนยันว่าตรวจสอบ / ลบแบรนด์เสร็จสิ้นแล้ว")
 
-    if st.button("🚀 ส่ง Gemini สกัดสเปค → ซิงค์เข้าข้อ 4", type="primary", use_container_width=True):
+    if st.button("🚀  ส่ง Gemini สกัดสเปค → ซิงค์เข้าข้อ 4", type="primary", use_container_width=True):
         if not job_desc.strip():
             st.markdown('<div class="warn-box">⚠️ โปรดระบุวัตถุประสงค์ก่อน</div>', unsafe_allow_html=True)
         elif not confirmed:
@@ -465,8 +913,7 @@ if st.session_state.pdf_pre_cleaned_texts:
                 s = summarize_single_file_with_gemini(vtxt)
                 summaries.append(f"\n[สเปคจากไฟล์ {idx+1} ({fname})]:\n{s}\n")
                 prog.progress((idx+1) / len(items))
-
-            with st.spinner("⚙️ รวมสเปคทั้งหมดเข้าข้อ 4..."):
+            with st.spinner("รวมสเปคทั้งหมดเข้าข้อ 4..."):
                 try:
                     merged = "".join(summaries)
                     prompt_merge = (
@@ -482,7 +929,7 @@ if st.session_state.pdf_pre_cleaned_texts:
                     final_text = _extract_gemini_text(resp)
                     st.session_state.ai_drafted_spec_v4 = final_text
                     st.session_state.tor_sections[4] = final_text
-                    st.markdown('<div class="success-box">🎉 ซิงค์สเปคเข้าข้อ 4 เรียบร้อย! เลื่อนลงดูข้อ 4 ด้านล่าง</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="success-box">🎉 ซิงค์สเปคเข้าข้อ 4 เรียบร้อย!</div>', unsafe_allow_html=True)
                     st.rerun()
                 except Exception as e:
                     st.markdown(f'<div class="error-box">❌ {e}</div>', unsafe_allow_html=True)
@@ -491,17 +938,24 @@ if st.session_state.pdf_pre_cleaned_texts:
 # 10. STEP 3 — TOR 10 SECTIONS
 # ══════════════════════════════════════════════════════════════════
 st.markdown("""
-<div class="sec-header">
-  <div class="sec-number">3</div>
-  <p class="sec-title">ร่างขอบเขตงาน TOR 10 ข้อหลัก</p>
+<div class="step-header">
+  <div class="step-pill">
+    <div class="step-num">3</div>
+    <span class="step-title">ร่างขอบเขตงาน TOR 10 ข้อหลัก</span>
+  </div>
 </div>""", unsafe_allow_html=True)
 
 is_busy = st.session_state.generating_section is not None
 
 if p_name:
     st.markdown(
-        f'<div class="info-box" style="margin-bottom:16px;">📍 <strong>{p_name}</strong> &nbsp;|&nbsp; '
-        f'งบประมาณ <strong>{p_budget:,} บาท</strong> &nbsp;|&nbsp; {p_criteria}</div>',
+        f'<div class="proj-pill">'
+        f'📍 <strong>{p_name}</strong>'
+        f'<span class="pill-sep">|</span>'
+        f'งบประมาณ <strong>{p_budget:,} บาท</strong>'
+        f'<span class="pill-sep">|</span>'
+        f'{p_criteria}'
+        f'</div>',
         unsafe_allow_html=True
     )
 
@@ -510,13 +964,16 @@ if is_busy:
     queue_remaining = len(st.session_state.generate_all_queue)
     col_info, col_cancel = st.columns([4, 1])
     with col_info:
+        queue_txt = f" &nbsp;·&nbsp; เหลือในคิว {queue_remaining} ข้อ" if queue_remaining else ""
         st.markdown(
-            f'<div class="warn-box" style="margin:0;">⚡ กำลังร่างข้อ <strong>{gen_sec}</strong>: {TOR_TITLES[gen_sec]}'
-            + (f' &nbsp;|&nbsp; เหลือในคิว: {queue_remaining} ข้อ' if queue_remaining else '') +
-            '</div>', unsafe_allow_html=True
+            f'<div class="gen-banner">'
+            f'<div class="gen-spinner"></div>'
+            f'<span>กำลังร่าง <strong>ข้อ {gen_sec}</strong> — {TOR_TITLES[gen_sec]}{queue_txt}</span>'
+            f'</div>',
+            unsafe_allow_html=True
         )
     with col_cancel:
-        if st.button("⛔ ยกเลิก", key="btn_cancel", use_container_width=True):
+        if st.button("⛔  ยกเลิก", key="btn_cancel", use_container_width=True):
             st.session_state.generating_section = None
             st.session_state.generate_all_queue = []
             st.session_state.gen_error = None
@@ -526,38 +983,35 @@ st.write("")
 
 if st.session_state.gen_error:
     st.markdown(
-        f'<div class="error-box">⚠️ การร่างข้อก่อนหน้าล้มเหลว: {st.session_state.gen_error} — คิวถูกหยุดแล้ว</div>',
+        f'<div class="error-box">⚠️ ร่างข้อก่อนหน้าล้มเหลว: {st.session_state.gen_error} — คิวถูกหยุดแล้ว</div>',
         unsafe_allow_html=True
     )
 
-# ── render 10 ข้อ ─────────────────────────────────────────────────
+# ── render 10 ข้อ ──────────────────────────────────────────────────
 for i in range(1, 11):
     is_gen_this = (st.session_state.generating_section == i)
     has_content = bool(st.session_state.tor_sections[i].strip())
 
     card_cls = "tor-card generating" if is_gen_this else ("tor-card done" if has_content else "tor-card")
-    num_cls  = "tor-num done-num" if has_content else "tor-num"
     status_html = ""
     if is_gen_this:
-        status_html = '<span class="status-gen">⚡ กำลังร่าง</span>'
+        status_html = '<span class="chip chip-gen">⚡ กำลังร่าง</span>'
     elif has_content:
-        status_html = '<span class="status-done">✓ มีเนื้อหา</span>'
+        status_html = '<span class="chip chip-done">✓ เสร็จแล้ว</span>'
 
     st.markdown(f"""
     <div class="{card_cls}">
       <div class="tor-card-header">
-        <div class="{num_cls}">{i:02d}</div>
-        <div class="tor-title-text">ข้อ {i} &nbsp;{TOR_TITLES[i]}</div>
+        <span class="tor-index">{i:02d}</span>
+        <span class="tor-title-text">{TOR_TITLES[i]}</span>
         {status_html}
       </div>
     </div>""", unsafe_allow_html=True)
 
     with st.expander("", expanded=is_gen_this or (i == 4 and has_content)):
-
         if is_gen_this:
             stream_box = st.empty()
-            stream_box.markdown('<div class="stream-container">_⚡ กำลังร่างเนื้อหา..._</div>', unsafe_allow_html=True)
-
+            stream_box.markdown('<div class="stream-container">กำลังร่างเนื้อหา...</div>', unsafe_allow_html=True)
             proj_ctx = (
                 f"โครงการ: {p_name}, หน่วยงาน: {p_agency}, "
                 f"งบประมาณ: {p_budget:,} บาท, เกณฑ์: {p_criteria}"
@@ -568,7 +1022,6 @@ for i in range(1, 11):
                 "อธิบายรายละเอียดเชิงระเบียบพัสดุให้ครบถ้วนและสละสลวย"
             )
             generate_typhoon_section(i, prompt, stream_box)
-
             if st.session_state.gen_error:
                 st.session_state.generating_section = None
                 st.session_state.generate_all_queue = []
@@ -577,7 +1030,6 @@ for i in range(1, 11):
                 if st.session_state.generate_all_queue:
                     next_sec = st.session_state.generate_all_queue.pop(0)
                     st.session_state.generating_section = next_sec
-
             st.rerun()
 
         else:
@@ -589,19 +1041,12 @@ for i in range(1, 11):
                 on_change=_ON_CHANGE[i],
                 label_visibility="collapsed"
             )
-
             if i == 4 and st.session_state.ai_drafted_spec_v4:
-                st.markdown(
-                    '<small style="color:#059669;font-weight:600;">✓ ซิงค์สเปค Gemini แล้ว</small>',
-                    unsafe_allow_html=True
-                )
+                st.markdown('<small style="color:var(--green);font-weight:600;">✓ ซิงค์สเปค Gemini แล้ว</small>', unsafe_allow_html=True)
 
             col_btn, _ = st.columns([1, 3])
             with col_btn:
-                if st.button(
-                    f"🔄 รีเจนข้อ {i}", key=f"btn_regen_{i}",
-                    disabled=is_busy, type="secondary"
-                ):
+                if st.button(f"🔄  รีเจนข้อ {i}", key=f"btn_regen_{i}", disabled=is_busy, type="secondary"):
                     if not p_name:
                         st.markdown('<div class="error-box">กรุณาระบุชื่อโครงการก่อน</div>', unsafe_allow_html=True)
                     else:
@@ -611,26 +1056,20 @@ for i in range(1, 11):
 
 st.write("")
 
-# ── ปุ่มรันทั้งหมด ────────────────────────────────────────────────
+# ── ปุ่มรันทั้งหมด ──────────────────────────────────────────────────
 col_run, col_clear = st.columns([3, 1])
 with col_run:
     if st.button(
-        "✨ ให้ Typhoon ร่างทุกข้อที่ยังว่างพร้อมกัน",
+        "✨  ให้ Typhoon ร่างทุกข้อที่ยังว่าง",
         type="primary", use_container_width=True, disabled=is_busy
     ):
         if not p_name:
             st.markdown('<div class="error-box">⚠️ กรุณาระบุชื่อโครงการก่อน</div>', unsafe_allow_html=True)
         else:
-            st.session_state.meta_data = {
-                "title": p_name, "agency": p_agency,
-                "budget": p_budget, "criteria": p_criteria
-            }
+            st.session_state.meta_data = {"title": p_name, "agency": p_agency, "budget": p_budget, "criteria": p_criteria}
             queue = [i for i in range(1, 11) if not st.session_state.tor_sections[i].strip()]
             if not queue:
-                st.markdown(
-                    '<div class="info-box">ทุกข้อมีเนื้อหาแล้ว หากต้องการ re-gen ให้กด "ล้างทั้งหมด" ก่อน</div>',
-                    unsafe_allow_html=True
-                )
+                st.markdown('<div class="info-box">ทุกข้อมีเนื้อหาแล้ว หากต้องการ re-gen ให้กด "ล้างทั้งหมด" ก่อน</div>', unsafe_allow_html=True)
             else:
                 st.session_state.gen_error = None
                 first = queue.pop(0)
@@ -639,7 +1078,7 @@ with col_run:
                 st.rerun()
 
 with col_clear:
-    if st.button("🗑️ ล้างทั้งหมด", use_container_width=True, disabled=is_busy, type="secondary"):
+    if st.button("🗑️  ล้างทั้งหมด", use_container_width=True, disabled=is_busy, type="secondary"):
         st.session_state.tor_sections = {i: "" for i in range(1, 11)}
         st.session_state.ai_drafted_spec_v4 = ""
         st.session_state.gen_error = None
@@ -651,18 +1090,15 @@ with col_clear:
 has_any = any(st.session_state.tor_sections[i].strip() for i in range(1, 11))
 if has_any:
     if not st.session_state.meta_data:
-        st.session_state.meta_data = {
-            "title": p_name or "ไม่ได้ระบุ", "agency": p_agency,
-            "budget": p_budget, "criteria": p_criteria
-        }
+        st.session_state.meta_data = {"title": p_name or "ไม่ได้ระบุ", "agency": p_agency, "budget": p_budget, "criteria": p_criteria}
 
-    st.markdown('<div class="export-section">', unsafe_allow_html=True)
+    st.markdown('<div class="export-zone">', unsafe_allow_html=True)
     st.markdown("""
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
-      <span style="font-size:1.4rem;">📥</span>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;">
+      <div style="width:46px;height:46px;background:var(--blue-dim);border:1px solid var(--blue-glow);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">📥</div>
       <div>
-        <div class="export-title">ส่งออกเอกสาร TOR</div>
-        <div class="export-sub">เลือกรูปแบบที่ต้องการดาวน์โหลด</div>
+        <div class="export-heading">ส่งออกเอกสาร TOR</div>
+        <div class="export-sub">เลือกรูปแบบไฟล์ที่ต้องการดาวน์โหลด</div>
       </div>
     </div>""", unsafe_allow_html=True)
 
@@ -677,16 +1113,16 @@ if has_any:
     dc1, dc2, dc3 = st.columns(3)
     with dc1:
         st.download_button(
-            "📝 Word Document (.DOCX)",
+            "📝  Word Document (.DOCX)",
             data=word_bytes,
             file_name=f"{fname_base}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True,
-            help="ฟอนต์ไทยครบถ้วน พร้อมใช้งานทันที"
+            help="ฟอนต์ TH Sarabun New พร้อมใช้งาน"
         )
     with dc2:
         st.download_button(
-            "📄 ข้อความธรรมดา (.TXT)",
+            "📄  ข้อความธรรมดา (.TXT)",
             data=all_txt,
             file_name=f"{fname_base}.txt",
             mime="text/plain",
@@ -695,11 +1131,11 @@ if has_any:
         )
     with dc3:
         st.download_button(
-            "🖨️ พิมพ์เป็น PDF (.HTML)",
+            "🖨️  พิมพ์เป็น PDF (.HTML)",
             data=html_bytes,
             file_name=f"{fname_base}_Print.html",
             mime="text/html",
             use_container_width=True,
-            help="เปิดในเบราว์เซอร์แล้วกด Ctrl+P → Save as PDF"
+            help="เปิดในเบราว์เซอร์ → Ctrl+P → Save as PDF"
         )
     st.markdown('</div>', unsafe_allow_html=True)
