@@ -164,22 +164,17 @@ def generate_typhoon_stream(prompt_text, section_num, placeholder):
             temperature=0.4, stream=True
         )
         for chunk in response_stream:
-            # ใช้การตรวจสอบ attr ที่ปลอดภัยขึ้น
             delta = chunk.choices[0].delta
             if hasattr(delta, 'content') and delta.content:
                 full_response += delta.content
                 placeholder.code(full_response + "▌", language="text")
         
-        # บันทึกข้อมูลที่เจนเสร็จลงใน state หลักที่ UI อ้างอิง
+        # บันทึกลง State
         st.session_state.tor_sections[section_num] = full_response
         placeholder.empty()
-        
-        # สั่ง Rerun เพื่อให้ text_area แสดงเนื้อหาใหม่ทันที
-        st.rerun()
-        return full_response
+        # ลบ st.rerun() ออกจากตรงนี้
     except Exception as e: 
         st.error(f"Error: {e}")
-        return ""
 # 📄 [EXPORT GENERATORS] 
 def build_word_document():
     doc = Document()
@@ -325,22 +320,30 @@ if p_name: st.caption(f"📍 โครงการปัจจุบัน: **{p
 
 for i in range(1, 11):
     with st.expander(f"📌 ข้อ {i}: {TOR_TITLES[i]}", expanded=(i==4)):
-        current_content = st.session_state.tor_sections.get(i, "")
-        if i == 4 and st.session_state.ai_drafted_spec_v4:
-            st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคทางเทคนิคที่ผ่านการตรวจสอบโดยสมบูรณ์แล้ว</small>", unsafe_allow_html=True)
-            
-        updated_content = st.text_area(f"เนื้อหาข้อ {i}", value=current_content, height=160, key=f"main_edit_sec_{i}", label_visibility="collapsed")
-        st.session_state.tor_sections[i] = updated_content
+        # 1. ใช้ text_area เดียวที่ผูกกับ session_state และ on_change
+        st.text_area(
+            "เนื้อหา:", 
+            value=st.session_state.tor_sections[i], 
+            height=160, 
+            key=f"area_{i}",
+            on_change=lambda i=i: st.session_state.tor_sections.update({i: st.session_state[f"area_{i}"]}),
+            label_visibility="collapsed"
+        )
         
-        col_space, col_action = st.columns([5, 1.2])
-        with col_action:
-            if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"main_regen_btn_{i}", use_container_width=True):
-                if not p_name: st.error("กรุณาระบุชื่อโครงการก่อน")
-                else:
-                    box_placeholder = st.empty()
-                    spec_prompt = f"จงเขียนทบทวนร่างข้อกำหนดขอบเขตงาน TOR โครงการ '{p_name}' เฉพาะในส่วนของ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ให้ออกมาเป็นข้อๆ ภาษาราชการเต็มรูปแบบ งบประมาณคือ {p_budget} บาท"
-                    generate_typhoon_stream(spec_prompt, i, box_placeholder)
-                    st.rerun()
+        # 2. ส่วนแจ้งเตือนข้อ 4
+        if i == 4 and st.session_state.ai_drafted_spec_v4:
+            st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคแล้ว</small>", unsafe_allow_html=True)
+            
+        # 3. ปุ่มกดรีเจน
+        if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"main_regen_btn_{i}", use_container_width=True):
+            if not p_name: 
+                st.error("กรุณาระบุชื่อโครงการก่อน")
+            else:
+                box_placeholder = st.empty()
+                spec_prompt = f"จงเขียนร่างขอบเขตงาน TOR โครงการ '{p_name}' ข้อ {i} หัวข้อ: {TOR_TITLES[i]} ภาษาราชการ งบประมาณ {p_budget} บาท"
+                
+                # เรียกฟังก์ชันที่อัปเดต state ให้เองโดยตรง
+                generate_typhoon_stream(spec_prompt, i, box_placeholder)
 
 st.write("")
 if st.button("✨ ให้ Typhoon เริ่มร่างข้อกำหนดส่วนที่เหลือพร้อมกันทั้งหมด", type="primary", use_container_width=True):
