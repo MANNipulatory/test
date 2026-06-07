@@ -153,26 +153,30 @@ def summarize_single_file_with_gemini(cleaned_text):
     except Exception: 
         return cleaned_text[:2000]
 
-def generate_typhoon_stream(prompt_text, section_num, placeholder):
+def generate_typhoon_stream(prompt_text, section_num):
     if not typhoon_client: return ""
     full_response = ""
+    # ใช้ st.empty() ชั่วคราวเพื่อแสดงขณะพิมพ์
+    box_placeholder = st.empty()
+    
     try:
-        response_stream = call_typhoon_with_retry(
-            typhoon_client.chat.completions.create,
+        response_stream = typhoon_client.chat.completions.create(
             model=TYPHOON_MODEL,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt_text}],
             temperature=0.4, stream=True
         )
         for chunk in response_stream:
-            delta = chunk.choices[0].delta
-            if hasattr(delta, 'content') and delta.content:
-                full_response += delta.content
-                placeholder.code(full_response + "▌", language="text")
+            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+                # แสดงผลขณะพิมพ์
+                box_placeholder.markdown(full_response + "▌")
         
-        # บันทึกลง State
+        # บันทึกค่าลง session_state แบบถาวร
         st.session_state.tor_sections[section_num] = full_response
-        placeholder.empty()
-        # ลบ st.rerun() ออกจากตรงนี้
+        box_placeholder.empty()
+        
+        # บังคับวาดหน้าจอใหม่ทันที
+        st.rerun() 
     except Exception as e: 
         st.error(f"Error: {e}")
 # 📄 [EXPORT GENERATORS] 
@@ -335,15 +339,12 @@ for i in range(1, 11):
             st.markdown("<small style='color:#10B981; font-weight:600;'>✓ ซิงค์ข้อมูลโครงสร้างสเปคแล้ว</small>", unsafe_allow_html=True)
             
         # 3. ปุ่มกดรีเจน
-        if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"main_regen_btn_{i}", use_container_width=True):
-            if not p_name: 
+       if st.button(f"🔄 รีเจนเนื้อหาข้อ {i}", key=f"btn_{i}"):
+           if not p_name:
                 st.error("กรุณาระบุชื่อโครงการก่อน")
-            else:
-                box_placeholder = st.empty()
-                spec_prompt = f"จงเขียนร่างขอบเขตงาน TOR โครงการ '{p_name}' ข้อ {i} หัวข้อ: {TOR_TITLES[i]} ภาษาราชการ งบประมาณ {p_budget} บาท"
-                
-                # เรียกฟังก์ชันที่อัปเดต state ให้เองโดยตรง
-                generate_typhoon_stream(spec_prompt, i, box_placeholder)
+           else:
+        # เรียกฟังก์ชันด้วยค่าใหม่
+               generate_typhoon_stream(spec_prompt, i)
 
 st.write("")
 if st.button("✨ ให้ Typhoon เริ่มร่างข้อกำหนดส่วนที่เหลือพร้อมกันทั้งหมด", type="primary", use_container_width=True):
