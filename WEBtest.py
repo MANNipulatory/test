@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import io
 import re
+import streamlit.components.v1 as components
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError as GeminiAPIError
@@ -31,431 +32,82 @@ TYPHOON_MODEL = "typhoon-v2.5-30b-a3b-instruct"
 # ══════════════════════════════════════════════════════════════════
 st.set_page_config(page_title="TOR Workspace", page_icon="🛡️", layout="wide")
 
-st.markdown("""
+_CSS = """
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* ── Theme-aware CSS variables (รองรับ Streamlit light/dark) ── */
 :root {
-    --tor-surface:       var(--secondary-background-color);
-    --tor-bg:            var(--background-color);
-    --tor-text:          var(--text-color);
-    --tor-border:        rgba(128,128,128,0.18);
-    --tor-border-hover:  rgba(59,130,246,0.4);
-    --tor-accent:        #3B82F6;
-    --tor-accent-dim:    rgba(59,130,246,0.14);
-    --tor-muted:         rgba(128,128,128,0.75);
-    --tor-success:       #10B981;
-    --tor-warn:          #F59E0B;
-    --tor-error:         #EF4444;
+    --tor-surface:      var(--secondary-background-color);
+    --tor-bg:           var(--background-color);
+    --tor-text:         var(--text-color);
+    --tor-border:       rgba(128,128,128,0.18);
+    --tor-border-hover: rgba(59,130,246,0.4);
+    --tor-accent:       #3B82F6;
+    --tor-accent-dim:   rgba(59,130,246,0.14);
+    --tor-muted:        rgba(128,128,128,0.75);
 }
-
-/* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; }
-html, body, [class*="css"] {
-    font-family: 'Noto Sans Thai', sans-serif !important;
-}
-.stApp {
-    background: var(--tor-bg);
-    color: var(--tor-text);
-}
-
-/* ── Hide default Streamlit chrome ── */
+html, body, [class*="css"] { font-family: 'Noto Sans Thai', sans-serif !important; }
+.stApp { background: var(--tor-bg); color: var(--tor-text); }
 #MainMenu, footer, header { visibility: hidden; }
-.block-container {
-    max-width: 1100px !important;
-    padding: 2rem 2rem 6rem !important;
-}
-
-/* ── App Header ── */
-.app-header {
-    background: var(--tor-surface);
-    border: 1px solid var(--tor-border);
-    border-radius: 16px;
-    padding: 28px 36px;
-    margin-bottom: 32px;
-    position: relative;
-    overflow: hidden;
-}
-.app-header::before {
-    content: '';
-    position: absolute;
-    top: 0; right: 0;
-    width: 300px; height: 100%;
-    background: radial-gradient(ellipse at right center, var(--tor-accent-dim) 0%, transparent 70%);
-    pointer-events: none;
-}
-.app-header-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: var(--tor-text);
-    margin: 0 0 6px;
-    letter-spacing: -0.3px;
-}
-.app-header-sub {
-    font-size: 0.85rem;
-    color: var(--tor-muted);
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-.badge {
-    background: var(--tor-accent-dim);
-    color: var(--tor-accent);
-    border: 1px solid rgba(59,130,246,0.3);
-    border-radius: 20px;
-    padding: 2px 10px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    font-family: 'IBM Plex Mono', monospace;
-}
-
-/* ── Section Header ── */
-.sec-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 36px 0 20px;
-}
-.sec-number {
-    width: 32px; height: 32px;
-    background: linear-gradient(135deg, #2563EB, #1D4ED8);
-    color: white;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.85rem;
-    font-weight: 700;
-    flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(37,99,235,0.35);
-}
-.sec-title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--tor-text);
-    margin: 0;
-}
-
-/* ── Cards ── */
-.card {
-    background: var(--tor-surface);
-    border: 1px solid var(--tor-border);
-    border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 16px;
-}
-.card-tight { padding: 16px 20px; }
-
-/* ── Form Elements ── */
-.stTextInput > label, .stTextArea > label,
-.stNumberInput > label, .stRadio > label,
-.stFileUploader > label {
-    color: var(--tor-muted) !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.3px !important;
-    text-transform: uppercase !important;
-    margin-bottom: 6px !important;
-}
-.stTextInput input, .stNumberInput input {
-    background: var(--tor-bg) !important;
-    border: 1px solid var(--tor-border) !important;
-    border-radius: 8px !important;
-    color: var(--tor-text) !important;
-    font-family: 'Noto Sans Thai', sans-serif !important;
-    font-size: 0.95rem !important;
-    padding: 10px 14px !important;
-    transition: border-color 0.2s, box-shadow 0.2s !important;
-}
-.stTextInput input:focus, .stNumberInput input:focus {
-    border-color: var(--tor-accent) !important;
-    box-shadow: 0 0 0 3px var(--tor-accent-dim) !important;
-}
-.stTextArea textarea {
-    background: var(--tor-bg) !important;
-    border: 1px solid var(--tor-border) !important;
-    border-radius: 8px !important;
-    color: var(--tor-text) !important;
-    font-family: 'Noto Sans Thai', sans-serif !important;
-    font-size: 0.93rem !important;
-    line-height: 1.7 !important;
-    transition: border-color 0.2s, box-shadow 0.2s !important;
-    resize: vertical !important;
-}
-.stTextArea textarea:focus {
-    border-color: var(--tor-accent) !important;
-    box-shadow: 0 0 0 3px var(--tor-accent-dim) !important;
-}
-
-/* ── Radio ── */
+.block-container { max-width: 1100px !important; padding: 2rem 2rem 6rem !important; }
+.app-header { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 16px; padding: 28px 36px; margin-bottom: 32px; position: relative; overflow: hidden; }
+.app-header::before { content: ''; position: absolute; top: 0; right: 0; width: 300px; height: 100%; background: radial-gradient(ellipse at right center, var(--tor-accent-dim) 0%, transparent 70%); pointer-events: none; }
+.app-header-title { font-size: 1.6rem; font-weight: 700; color: var(--tor-text); margin: 0 0 6px; }
+.app-header-sub { font-size: 0.85rem; color: var(--tor-muted); margin: 0; display: flex; align-items: center; gap: 16px; }
+.badge { background: var(--tor-accent-dim); color: var(--tor-accent); border: 1px solid rgba(59,130,246,0.3); border-radius: 20px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+.sec-header { display: flex; align-items: center; gap: 12px; margin: 36px 0 20px; }
+.sec-number { width: 32px; height: 32px; background: linear-gradient(135deg, #2563EB, #1D4ED8); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; flex-shrink: 0; box-shadow: 0 4px 12px rgba(37,99,235,0.35); }
+.sec-title { font-size: 1.05rem; font-weight: 600; color: var(--tor-text); margin: 0; }
+.card { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+.stTextInput > label, .stTextArea > label, .stNumberInput > label, .stRadio > label, .stFileUploader > label { color: var(--tor-muted) !important; font-size: 0.82rem !important; font-weight: 500 !important; letter-spacing: 0.3px !important; text-transform: uppercase !important; margin-bottom: 6px !important; }
+.stTextInput input, .stNumberInput input { background: var(--tor-bg) !important; border: 1px solid var(--tor-border) !important; border-radius: 8px !important; color: var(--tor-text) !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.95rem !important; padding: 10px 14px !important; transition: border-color 0.2s, box-shadow 0.2s !important; }
+.stTextInput input:focus, .stNumberInput input:focus { border-color: var(--tor-accent) !important; box-shadow: 0 0 0 3px var(--tor-accent-dim) !important; }
+.stTextArea textarea { background: var(--tor-bg) !important; border: 1px solid var(--tor-border) !important; border-radius: 8px !important; color: var(--tor-text) !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.93rem !important; line-height: 1.7 !important; transition: border-color 0.2s, box-shadow 0.2s !important; resize: vertical !important; }
+.stTextArea textarea:focus { border-color: var(--tor-accent) !important; box-shadow: 0 0 0 3px var(--tor-accent-dim) !important; }
 .stRadio > div { gap: 12px !important; }
-.stRadio [data-testid="stMarkdownContainer"] p {
-    color: var(--tor-text) !important;
-    font-size: 0.9rem !important;
-}
-
-/* ── Buttons ── */
-.stButton > button {
-    border-radius: 8px !important;
-    font-family: 'Noto Sans Thai', sans-serif !important;
-    font-size: 0.88rem !important;
-    font-weight: 600 !important;
-    transition: all 0.18s !important;
-    border: 1px solid transparent !important;
-}
-.stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
-    color: white !important;
-    box-shadow: 0 4px 14px rgba(37,99,235,0.35) !important;
-    border: none !important;
-}
-.stButton > button[kind="primary"]:hover {
-    transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(37,99,235,0.45) !important;
-}
-.stButton > button[kind="secondary"] {
-    background: var(--tor-surface) !important;
-    color: var(--tor-muted) !important;
-    border: 1px solid var(--tor-border) !important;
-}
-.stButton > button[kind="secondary"]:hover {
-    border-color: var(--tor-border-hover) !important;
-    color: var(--tor-text) !important;
-}
-.stButton > button:disabled {
-    opacity: 0.4 !important;
-    cursor: not-allowed !important;
-    transform: none !important;
-}
-
-/* ── TOR Section Cards ── */
-.tor-card {
-    background: var(--tor-surface);
-    border: 1px solid var(--tor-border);
-    border-radius: 12px;
-    margin-bottom: 12px;
-    overflow: hidden;
-    transition: border-color 0.2s;
-}
+.stRadio [data-testid="stMarkdownContainer"] p { color: var(--tor-text) !important; font-size: 0.9rem !important; }
+.stButton > button { border-radius: 8px !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.88rem !important; font-weight: 600 !important; transition: all 0.18s !important; }
+.stButton > button[kind="primary"] { background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important; color: white !important; box-shadow: 0 4px 14px rgba(37,99,235,0.35) !important; border: none !important; }
+.stButton > button[kind="primary"]:hover { transform: translateY(-1px) !important; box-shadow: 0 6px 20px rgba(37,99,235,0.45) !important; }
+.stButton > button[kind="secondary"] { background: var(--tor-surface) !important; color: var(--tor-muted) !important; border: 1px solid var(--tor-border) !important; }
+.stButton > button[kind="secondary"]:hover { border-color: var(--tor-border-hover) !important; color: var(--tor-text) !important; }
+.stButton > button:disabled { opacity: 0.4 !important; cursor: not-allowed !important; transform: none !important; }
+.tor-card { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; transition: border-color 0.2s; }
 .tor-card:hover { border-color: var(--tor-border-hover); }
-.tor-card.generating {
-    border-color: var(--tor-accent);
-    box-shadow: 0 0 0 1px var(--tor-accent-dim), 0 4px 24px var(--tor-accent-dim);
-}
+.tor-card.generating { border-color: var(--tor-accent); box-shadow: 0 0 0 1px var(--tor-accent-dim), 0 4px 24px var(--tor-accent-dim); }
 .tor-card.done { border-color: rgba(16,185,129,0.35); }
-
-.tor-card-header {
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    user-select: none;
-}
-.tor-num {
-    width: 26px; height: 26px;
-    background: var(--tor-accent-dim);
-    color: var(--tor-accent);
-    border-radius: 6px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    font-family: 'IBM Plex Mono', monospace;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-}
-.tor-num.done-num {
-    background: rgba(16,185,129,0.18);
-    color: #10B981;
-}
-.tor-title-text {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--tor-text);
-    flex: 1;
-}
-
-/* ── Status Badges ── */
-.status-gen {
-    background: rgba(245,158,11,0.15);
-    color: #D97706;
-    border: 1px solid rgba(245,158,11,0.3);
-    border-radius: 6px;
-    padding: 2px 9px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    font-family: 'IBM Plex Mono', monospace;
-    animation: pulse-badge 1.2s ease-in-out infinite;
-}
-.status-done {
-    background: rgba(16,185,129,0.12);
-    color: #059669;
-    border: 1px solid rgba(16,185,129,0.3);
-    border-radius: 6px;
-    padding: 2px 9px;
-    font-size: 0.72rem;
-    font-weight: 600;
-}
-@keyframes pulse-badge {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.55; }
-}
-
-/* ── Alert / Info boxes ── */
-.info-box {
-    background: var(--tor-accent-dim);
-    border: 1px solid rgba(59,130,246,0.28);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: var(--tor-accent);
-    font-size: 0.88rem;
-    margin: 12px 0;
-}
-.warn-box {
-    background: rgba(245,158,11,0.1);
-    border: 1px solid rgba(245,158,11,0.28);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: #B45309;
-    font-size: 0.88rem;
-    margin: 12px 0;
-}
-.success-box {
-    background: rgba(16,185,129,0.1);
-    border: 1px solid rgba(16,185,129,0.28);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: #047857;
-    font-size: 0.88rem;
-    margin: 12px 0;
-}
-.error-box {
-    background: rgba(239,68,68,0.1);
-    border: 1px solid rgba(239,68,68,0.28);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: #B91C1C;
-    font-size: 0.88rem;
-    margin: 12px 0;
-}
-
-/* ── Progress bar ── */
-.stProgress > div > div > div {
-    background: linear-gradient(90deg, #2563EB, #60A5FA) !important;
-    border-radius: 99px !important;
-}
-.stProgress > div > div {
-    background: var(--tor-border) !important;
-    border-radius: 99px !important;
-}
-
-/* ── File uploader ── */
-[data-testid="stFileUploader"] {
-    background: var(--tor-surface) !important;
-    border: 1.5px dashed var(--tor-border) !important;
-    border-radius: 10px !important;
-    padding: 8px !important;
-    transition: border-color 0.2s !important;
-}
-[data-testid="stFileUploader"]:hover {
-    border-color: var(--tor-border-hover) !important;
-}
-
-/* ── Expander ── */
-.streamlit-expanderHeader {
-    background: var(--tor-surface) !important;
-    border: 1px solid var(--tor-border) !important;
-    border-radius: 8px !important;
-    color: var(--tor-text) !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-}
-
-/* ── Checkbox ── */
+.tor-card-header { padding: 14px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+.tor-num { width: 26px; height: 26px; background: var(--tor-accent-dim); color: var(--tor-accent); border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'IBM Plex Mono', monospace; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tor-num.done-num { background: rgba(16,185,129,0.18); color: #10B981; }
+.tor-title-text { font-size: 0.9rem; font-weight: 600; color: var(--tor-text); flex: 1; }
+.status-gen { background: rgba(245,158,11,0.15); color: #D97706; border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; font-family: 'IBM Plex Mono', monospace; animation: pulse-badge 1.2s ease-in-out infinite; }
+.status-done { background: rgba(16,185,129,0.12); color: #059669; border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
+@keyframes pulse-badge { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.info-box { background: var(--tor-accent-dim); border: 1px solid rgba(59,130,246,0.28); border-radius: 8px; padding: 12px 16px; color: var(--tor-accent); font-size: 0.88rem; margin: 12px 0; }
+.warn-box { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.28); border-radius: 8px; padding: 12px 16px; color: #B45309; font-size: 0.88rem; margin: 12px 0; }
+.success-box { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.28); border-radius: 8px; padding: 12px 16px; color: #047857; font-size: 0.88rem; margin: 12px 0; }
+.error-box { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.28); border-radius: 8px; padding: 12px 16px; color: #B91C1C; font-size: 0.88rem; margin: 12px 0; }
+.stProgress > div > div > div { background: linear-gradient(90deg, #2563EB, #60A5FA) !important; border-radius: 99px !important; }
+.stProgress > div > div { background: var(--tor-border) !important; border-radius: 99px !important; }
+[data-testid="stFileUploader"] { background: var(--tor-surface) !important; border: 1.5px dashed var(--tor-border) !important; border-radius: 10px !important; padding: 8px !important; transition: border-color 0.2s !important; }
+[data-testid="stFileUploader"]:hover { border-color: var(--tor-border-hover) !important; }
+.streamlit-expanderHeader { background: var(--tor-surface) !important; border: 1px solid var(--tor-border) !important; border-radius: 8px !important; color: var(--tor-text) !important; font-weight: 600 !important; font-size: 0.88rem !important; }
 .stCheckbox label { color: var(--tor-muted) !important; font-size: 0.88rem !important; }
-
-/* ── Download buttons ── */
-.stDownloadButton > button {
-    background: var(--tor-surface) !important;
-    border: 1px solid var(--tor-border) !important;
-    color: var(--tor-text) !important;
-    border-radius: 10px !important;
-    font-family: 'Noto Sans Thai', sans-serif !important;
-    font-size: 0.88rem !important;
-    font-weight: 600 !important;
-    padding: 12px 16px !important;
-    width: 100% !important;
-    transition: all 0.18s !important;
-}
-.stDownloadButton > button:hover {
-    background: var(--tor-accent-dim) !important;
-    border-color: var(--tor-border-hover) !important;
-    color: var(--tor-accent) !important;
-    transform: translateY(-1px) !important;
-}
-
-/* ── Export section ── */
-.export-section {
-    background: var(--tor-surface);
-    border: 1px solid var(--tor-border);
-    border-radius: 16px;
-    padding: 28px;
-    margin-top: 36px;
-}
-
-/* ── Export heading text ── */
-.export-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--tor-text);
-}
-.export-sub {
-    font-size: 0.8rem;
-    color: var(--tor-muted);
-}
-
-/* ── Divider ── */
+.stDownloadButton > button { background: var(--tor-surface) !important; border: 1px solid var(--tor-border) !important; color: var(--tor-text) !important; border-radius: 10px !important; font-family: 'Noto Sans Thai', sans-serif !important; font-size: 0.88rem !important; font-weight: 600 !important; padding: 12px 16px !important; width: 100% !important; transition: all 0.18s !important; }
+.stDownloadButton > button:hover { background: var(--tor-accent-dim) !important; border-color: var(--tor-border-hover) !important; color: var(--tor-accent) !important; transform: translateY(-1px) !important; }
+.export-section { background: var(--tor-surface); border: 1px solid var(--tor-border); border-radius: 16px; padding: 28px; margin-top: 36px; }
+.export-title { font-size: 1rem; font-weight: 700; color: var(--tor-text); }
+.export-sub { font-size: 0.8rem; color: var(--tor-muted); }
 hr { border-color: var(--tor-border) !important; margin: 28px 0 !important; }
-
-/* ── Spinner ── */
 .stSpinner > div { border-top-color: var(--tor-accent) !important; }
-
-/* ── Toast ── */
-[data-testid="stToast"] {
-    background: var(--tor-surface) !important;
-    border: 1px solid var(--tor-border) !important;
-    color: var(--tor-text) !important;
-    border-radius: 10px !important;
-}
-
-/* ── Streaming text container ── */
-.stream-container {
-    background: var(--tor-bg);
-    border: 1px solid rgba(59,130,246,0.3);
-    border-radius: 8px;
-    padding: 16px;
-    min-height: 80px;
-    font-size: 0.92rem;
-    line-height: 1.8;
-    color: var(--tor-text);
-}
-
-/* ── Queue progress bar ── */
-.queue-track {
-    background: var(--tor-border);
-    border-radius: 4px;
-    height: 4px;
-    margin-top: 8px;
-    overflow: hidden;
-}
-.queue-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #2563EB, #60A5FA);
-    border-radius: 4px;
-    transition: width 0.4s ease;
-}
+[data-testid="stToast"] { background: var(--tor-surface) !important; border: 1px solid var(--tor-border) !important; color: var(--tor-text) !important; border-radius: 10px !important; }
+.stream-container { background: var(--tor-bg); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 16px; min-height: 80px; font-size: 0.92rem; line-height: 1.8; color: var(--tor-text); }
 </style>
-""", unsafe_allow_html=True)
+"""
+
+# inject CSS — ใช้ components.html เพื่อป้องกัน Streamlit sanitize <style> tag
+components.html(_CSS, height=0)
+
 
 # ══════════════════════════════════════════════════════════════════
 # 3. CONSTANTS
