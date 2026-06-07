@@ -688,6 +688,7 @@ def generate_typhoon_section(section_num, prompt_text, stream_placeholder):
             unsafe_allow_html=True
         )
         st.session_state.tor_sections[section_num] = full_response
+        st.session_state[f"ta_{section_num}_dirty"] = True
         st.session_state.gen_error = None
         return full_response
     except Exception as e:
@@ -705,6 +706,17 @@ def _make_on_change(idx):
     return _cb
 
 _ON_CHANGE = {i: _make_on_change(i) for i in range(1, 11)}
+
+def _sync_ta_keys():
+    """หลัง Typhoon generate เสร็จ ให้ set dirty flag เพื่อ force update text_area widget
+    ในรอบ rerun ถัดไป โดยไม่ทับค่าที่ user กำลังแก้อยู่"""
+    for i in range(1, 11):
+        dirty_flag = f"ta_{i}_dirty"
+        if dirty_flag in st.session_state and st.session_state[dirty_flag]:
+            st.session_state[f"ta_{i}"] = st.session_state.tor_sections[i]
+            st.session_state[dirty_flag] = False
+        elif f"ta_{i}" not in st.session_state:
+            st.session_state[f"ta_{i}"] = st.session_state.tor_sections[i]
 
 # ══════════════════════════════════════════════════════════════════
 # 6. EXPORT BUILDERS
@@ -934,18 +946,19 @@ if st.session_state.pdf_pre_cleaned_texts:
                     st.markdown('<div class="success-box">🎉 ซิงค์สเปคเข้าข้อ 4 เรียบร้อย!</div>', unsafe_allow_html=True)
                     st.markdown("""
                     <div style="margin-top:16px;">
-                      <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">
-                        📋 สเปคที่ Gemini สกัดได้ (ข้อ 4)
+                      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                        <div style="width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 8px #34D399;"></div>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;font-weight:600;letter-spacing:2px;color:#34D399;">GEMINI OUTPUT — สเปคที่สกัดได้</span>
                       </div>
                     </div>""", unsafe_allow_html=True)
-                    st.text_area(
-                        label="สเปค Gemini",
-                        value=final_text,
-                        height=300,
-                        key="gemini_spec_preview",
-                        label_visibility="collapsed",
-                        disabled=True
-                    )
+                    with st.expander("📋 ดูสเปคที่ Gemini เจนออกมา (จะถูกล็อคไว้ให้ Typhoon ใช้)", expanded=True):
+                        st.text_area(
+                            label="สเปค Gemini (อ่านอย่างเดียว — ซิงค์เข้าข้อ 4 แล้ว)",
+                            value=final_text,
+                            height=300,
+                            disabled=True,
+                            key="gemini_spec_preview"
+                        )
                     st.rerun()
                 except Exception as e:
                     st.markdown(f'<div class="error-box">❌ {e}</div>', unsafe_allow_html=True)
@@ -962,23 +975,6 @@ st.markdown("""
 </div>""", unsafe_allow_html=True)
 
 is_busy = st.session_state.generating_section is not None
-
-# ── แสดงสเปค Gemini (ถ้ามี) ─────────────────────────────────────
-if st.session_state.ai_drafted_spec_v4.strip():
-    with st.expander("📋 สเปคที่ Gemini สกัดได้ (ข้อ 4) — คลิกเพื่อดู/ซ่อน", expanded=False):
-        st.markdown(
-            '<small style="color:var(--muted);">สเปคนี้จะถูกส่งให้ Typhoon เป็น reference ตอนร่างข้อ 4 โดยอัตโนมัติ</small>',
-            unsafe_allow_html=True
-        )
-        st.text_area(
-            label="gemini_spec_ro",
-            value=st.session_state.ai_drafted_spec_v4,
-            height=280,
-            key="gemini_spec_readonly",
-            label_visibility="collapsed",
-            disabled=True
-        )
-    st.write("")
 
 if p_name:
     st.markdown(
@@ -1023,6 +1019,7 @@ if st.session_state.gen_error:
     )
 
 # ── render 10 ข้อ ──────────────────────────────────────────────────
+_sync_ta_keys()
 for i in range(1, 11):
     is_gen_this = (st.session_state.generating_section == i)
     has_content = bool(st.session_state.tor_sections[i].strip())
@@ -1051,15 +1048,15 @@ for i in range(1, 11):
                 f"โครงการ: {p_name}, หน่วยงาน: {p_agency}, "
                 f"งบประมาณ: {p_budget:,} บาท, เกณฑ์: {p_criteria}"
             )
-            gemini_spec = st.session_state.ai_drafted_spec_v4
-            if i == 4 and gemini_spec.strip():
+            if i == 4 and st.session_state.ai_drafted_spec_v4:
+                locked_spec = st.session_state.ai_drafted_spec_v4
                 prompt = (
                     f"จงเขียนเนื้อหาของขอบเขตของงาน (TOR) ตามมาตรฐานราชการไทย ว.159 "
                     f"เฉพาะ 'ข้อ {i} หัวข้อ: {TOR_TITLES[i]}' ของ{proj_ctx}\n\n"
-                    f"⚠️ สำคัญมาก: ให้ใช้ข้อมูลสเปคด้านล่างนี้เป็นฐานในการเขียนทุกคุณลักษณะเฉพาะ "
-                    f"ห้ามเปลี่ยนแปลง เพิ่ม หรือตัดทอนตัวเลขและข้อกำหนดทางเทคนิคโดยเด็ดขาด "
-                    f"ให้จัดเรียงเป็นรูปแบบ TOR ราชการเท่านั้น:\n\n"
-                    f"[สเปคที่ได้จากการสกัดเอกสาร]:\n{gemini_spec}"
+                    f"⚠️ คำสั่งเข้มงวด: คุณต้องใช้ข้อมูลสเปคด้านล่างนี้ทั้งหมดตามที่กำหนดไว้อย่างครบถ้วน "
+                    f"ห้ามเปลี่ยนแปลง เพิ่มเติม หรือลดทอนข้อกำหนดทางเทคนิคใดๆ โดยเด็ดขาด "
+                    f"หน้าที่ของคุณคือเรียบเรียงสเปคเหล่านี้เป็นภาษาราชการ TOR เท่านั้น\n\n"
+                    f"[สเปคที่ต้องใช้ — ห้ามแก้ไข]:\n{locked_spec}"
                 )
             else:
                 prompt = (
@@ -1081,7 +1078,6 @@ for i in range(1, 11):
         else:
             st.text_area(
                 label="เนื้อหา",
-                value=st.session_state.tor_sections[i],
                 height=200,
                 key=f"ta_{i}",
                 on_change=_ON_CHANGE[i],
@@ -1128,6 +1124,9 @@ with col_clear:
         st.session_state.tor_sections = {i: "" for i in range(1, 11)}
         st.session_state.ai_drafted_spec_v4 = ""
         st.session_state.gen_error = None
+        for i in range(1, 11):
+            st.session_state[f"ta_{i}"] = ""
+            st.session_state[f"ta_{i}_dirty"] = False
         st.rerun()
 
 # ══════════════════════════════════════════════════════════════════
