@@ -607,17 +607,33 @@ for k, v in _DEFAULTS.items():
 # 5. HELPERS
 # ══════════════════════════════════════════════════════════════════
 def call_gemini_with_retry(func, *args, **kwargs):
+    import time
     last_exc = None
-    for attempt in range(3):
+    # backoff: 10s, 30s, 60s, 90s, 120s
+    waits = [10, 30, 60, 90, 120]
+    for attempt, wait in enumerate(waits):
         try:
             return func(*args, **kwargs)
         except GeminiAPIError as e:
             last_exc = e
-            if e.code in [429, 503]:
-                import time; time.sleep(5 * (attempt + 1))
+            if e.code == 429:
+                msg = f"⏳ Gemini quota เต็ม — รอ {wait} วินาที แล้วลองใหม่ (ครั้งที่ {attempt+1}/{len(waits)})"
+                st.toast(msg, icon="⏳")
+                time.sleep(wait)
+                continue
+            elif e.code == 503:
+                msg = f"🔄 Gemini ไม่พร้อม — รอ {wait} วินาที แล้วลองใหม่ (ครั้งที่ {attempt+1}/{len(waits)})"
+                st.toast(msg, icon="🔄")
+                time.sleep(wait)
                 continue
             raise e
-    raise last_exc
+        except Exception as e:
+            raise e
+    # หมด retry ทั้งหมด — raise พร้อม message ชัดเจน
+    raise RuntimeError(
+        f"Gemini quota เกินขีดจำกัด ลองซ้ำ {len(waits)} ครั้งแล้ว "
+        f"กรุณารอสักครู่แล้วลองใหม่ หรือตรวจสอบ quota ที่ Google AI Studio"
+    ) from last_exc
 
 def extract_text_from_pdf(uploaded_file):
     try:
@@ -657,7 +673,14 @@ def summarize_single_file_with_gemini(cleaned_text):
             gemini_client.models.generate_content, model=GEMINI_MODEL,
             contents=prompt, config=types.GenerateContentConfig(temperature=0.1)
         )
-        return _extract_gemini_text(resp) or cleaned_text[:2000]
+        return _extract_gemini_text(resp) or cleaned_text[:4000]
+    except RuntimeError as e:
+        # quota หมดหลัง retry ครบ — fallback ใช้ข้อความ regex-cleaned แทน
+        st.markdown(
+            f'<div class="warn-box">⚠️ {e} — ใช้ข้อความที่ Regex คลีนแล้วแทนชั่วคราว</div>',
+            unsafe_allow_html=True
+        )
+        return cleaned_text[:4000]
     except Exception as e:
         return f"[สกัดสเปคไม่สำเร็จ: {e}]\n\n{cleaned_text[:2000]}"
 
@@ -960,6 +983,8 @@ if st.session_state.pdf_pre_cleaned_texts:
                             key="gemini_spec_preview"
                         )
                     st.rerun()
+                except RuntimeError as e:
+                    st.markdown(f'<div class="warn-box">⏳ {e}</div>', unsafe_allow_html=True)
                 except Exception as e:
                     st.markdown(f'<div class="error-box">❌ {e}</div>', unsafe_allow_html=True)
 
